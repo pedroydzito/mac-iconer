@@ -1,36 +1,12 @@
-import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: LibraryStore
     @EnvironmentObject private var updater: Updater
-    @AppStorage("keepRunning") private var keepRunning = true
-    @AppStorage("showMenuBar") private var showMenuBar = true
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         Form {
             Section {
-                Toggle("Abrir ao iniciar sessão", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enabled in
-                        do {
-                            if enabled { try SMAppService.mainApp.register() }
-                            else { try SMAppService.mainApp.unregister() }
-                        } catch {
-                            store.errorMessage = error.localizedDescription
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
-                        }
-                    }
-                Toggle("Continuar rodando ao fechar a janela", isOn: $keepRunning)
-                Toggle("Mostrar na barra de menus", isOn: $showMenuBar)
-            } header: {
-                Text("Geral")
-            } footer: {
-                Text("Com o Renicon rodando, ele percebe quando um app é atualizado e reaplica o ícone personalizado automaticamente.")
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Atalhos") {
                 LabeledContent("Pasta") {
                     Button("Mostrar no Finder") {
                         try? FileManager.default.createDirectory(at: ShortcutBuilder.folder, withIntermediateDirectories: true)
@@ -46,6 +22,11 @@ struct SettingsView: View {
                 LabeledContent("Dock") {
                     Button("Recarregar Dock") { store.reloadDock() }
                 }
+            } header: {
+                Text("Atalhos")
+            } footer: {
+                Text("O Renicon não precisa ficar aberto. Os atalhos funcionam sozinhos e, se uma atualização apagar o ícone de um app, o macOS chama um pequeno script que o recoloca — sem nada rodando em segundo plano.")
+                    .foregroundStyle(.secondary)
             }
 
             Section {

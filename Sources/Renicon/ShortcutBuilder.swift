@@ -83,6 +83,14 @@ enum ShortcutBuilder {
     }
 
     private static func launcherScript(for entry: AppEntry) -> String {
+        let script = launcherBody(for: entry)
+        guard entry.applyIconToOriginal else { return script }
+        // Antes de abrir, recoloca o ícone no app original se uma atualização o removeu.
+        let reapply = "/usr/bin/osascript -l JavaScript \(shellQuote(AutoReapply.scriptURL.path)) \(entry.id.uuidString) >/dev/null 2>&1\n"
+        return script.replacingOccurrences(of: "#!/bin/sh\n", with: "#!/bin/sh\n" + reapply)
+    }
+
+    private static func launcherBody(for entry: AppEntry) -> String {
         let path = shellQuote(entry.originalPath)
         if let bundleID = entry.bundleIdentifier, !bundleID.isEmpty {
             return """
