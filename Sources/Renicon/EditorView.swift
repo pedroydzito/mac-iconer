@@ -78,7 +78,6 @@ struct EditorView: View {
                             .padding(.horizontal, 4)
                     }
                     .glassButton()
-                    .hoverLift()
 
                     Button {
                         store.pinToDock(entry.id)
@@ -89,7 +88,6 @@ struct EditorView: View {
                             .padding(.horizontal, 4)
                     }
                     .glassButton()
-                    .hoverLift()
                     .help(inDock ? "Já está no Dock. Clique para atualizar nome e ícone lá."
                                  : "Fixa no Dock com o novo nome e ícone. Ao abrir o app, ele usa este mesmo item do Dock.")
                 }
@@ -107,7 +105,6 @@ struct EditorView: View {
                     .frame(minWidth: 120)
                 }
                 .glassButton(prominent: entry.hasPendingChanges)
-                .hoverLift()
                 .keyboardShortcut("s")
                 .disabled(store.busy || !entry.hasPendingChanges)
                 .help("Cria o atalho com o novo nome e ícone (⌘S)")
@@ -238,7 +235,6 @@ private struct NameField: View {
         .padding(.vertical, 12)
         .frame(width: 400)
         .glass(in: Capsule(), interactive: true)
-        .hoverLift(scale: 1.015)
         .overlay(
             Capsule().stroke(Color.accentColor.opacity(focused.wrappedValue ? 0.8 : 0), lineWidth: 2)
         )

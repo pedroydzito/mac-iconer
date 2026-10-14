@@ -136,7 +136,6 @@ struct EmptyDropView: View {
             }
             .glassButton(prominent: true)
             .controlSize(.large)
-            .hoverLift()
             Spacer()
         }
         .padding(30)
@@ -175,7 +174,6 @@ struct AppShelf: View {
                 }
                 .buttonStyle(.plain)
                 .glass(in: Circle(), interactive: true)
-                .hoverLift(scale: 1.1)
                 .help("Adicionar app (⌘O)")
             }
         }
