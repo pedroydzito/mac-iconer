@@ -1,44 +1,40 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var store: LibraryStore
-    @State private var search = ""
-    @State private var isTargeted = false
+    @State private var dropTargeted = false
+
+    private var selectedEntry: AppEntry? {
+        store.selection.flatMap { id in store.entries.first { $0.id == id } }
+    }
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(search: search)
-                .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 340)
-        } detail: {
-            if let id = store.selection, let entry = store.binding(for: id) {
-                EditorView(entry: entry)
-                    .id(id)
-            } else {
-                EmptyStateView()
-            }
-        }
-        .searchable(text: $search, placement: .sidebar, prompt: "Buscar")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { store.chooseApps() } label: {
-                    Label("Adicionar App", systemImage: "plus")
+        ZStack {
+            Backdrop(image: selectedEntry.map { store.effectiveIcon(for: $0) })
+
+            VStack(spacing: 0) {
+                if let id = store.selection, let entry = store.binding(for: id) {
+                    EditorView(entry: entry)
+                        .id(id)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                } else {
+                    EmptyDropView(targeted: dropTargeted)
                 }
-                .help("Adicionar apps para personalizar")
+                if !store.entries.isEmpty {
+                    AppShelf()
+                        .padding(.bottom, 18)
+                }
             }
+            .padding(.top, 28)
+            .animation(.spring(duration: 0.35), value: store.selection)
         }
+        .frame(minWidth: 640, minHeight: 600)
         .dropDestination(for: URL.self) { urls, _ in
             let apps = urls.filter { $0.pathExtension.lowercased() == "app" }
             store.add(urls: apps)
             return !apps.isEmpty
-        } isTargeted: { isTargeted = $0 }
-        .overlay {
-            if isTargeted {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [10, 6]))
-                    .padding(6)
-                    .allowsHitTesting(false)
-            }
-        }
+        } isTargeted: { dropTargeted = $0 }
         .alert("Algo deu errado", isPresented: Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
@@ -47,108 +43,126 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+        .preferredColorScheme(.dark)
     }
 }
 
-struct SidebarView: View {
-    @EnvironmentObject private var store: LibraryStore
-    let search: String
+// MARK: - Estado vazio
 
-    private var filtered: [AppEntry] {
-        guard !search.isEmpty else { return store.entries }
-        return store.entries.filter {
-            $0.displayName.localizedCaseInsensitiveContains(search) ||
-            $0.originalName.localizedCaseInsensitiveContains(search)
-        }
-    }
+struct EmptyDropView: View {
+    @EnvironmentObject private var store: LibraryStore
+    let targeted: Bool
 
     var body: some View {
-        List(selection: $store.selection) {
-            Section("Apps Personalizados") {
-                ForEach(filtered) { entry in
-                    SidebarRow(entry: entry)
-                        .tag(entry.id)
-                        .contextMenu {
-                            Button("Aplicar Alterações") { store.apply(entry.id) }
-                            if let path = entry.shortcutPath {
-                                Button("Abrir") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
-                                Button("Mostrar Atalho no Finder") {
-                                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-                                }
-                            }
-                            Button("Mostrar Original no Finder") {
-                                NSWorkspace.shared.activateFileViewerSelecting([entry.originalURL])
-                            }
-                            Divider()
-                            Button("Remover", role: .destructive) { store.remove(entry.id) }
+        VStack(spacing: 22) {
+            Spacer()
+            ZStack {
+                RoundedRectangle(cornerRadius: 44, style: .continuous)
+                    .strokeBorder(style: StrokeStyle(lineWidth: 2.5, dash: [10, 8]))
+                    .foregroundStyle(targeted ? Color.accentColor : .white.opacity(0.25))
+                Image(systemName: targeted ? "plus.app.fill" : "square.and.arrow.down")
+                    .font(.system(size: 54, weight: .light))
+                    .foregroundStyle(targeted ? Color.accentColor : .white.opacity(0.6))
+                    .symbolEffect(.bounce, value: targeted)
+            }
+            .frame(width: 200, height: 200)
+            .glass(in: RoundedRectangle(cornerRadius: 44, style: .continuous))
+            .scaleEffect(targeted ? 1.05 : 1)
+            .animation(.spring(duration: 0.3), value: targeted)
+
+            VStack(spacing: 8) {
+                Text("Solte um app aqui")
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                Text("Arraste qualquer app da pasta Aplicativos para mudar o nome e o ícone dele.\nO app original continua atualizando normalmente.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                store.chooseApps()
+            } label: {
+                Label("Escolher App", systemImage: "plus")
+                    .padding(.horizontal, 6)
+            }
+            .glassButton(prominent: true)
+            .controlSize(.large)
+            Spacer()
+        }
+        .padding(30)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Prateleira de apps (estilo Dock)
+
+struct AppShelf: View {
+    @EnvironmentObject private var store: LibraryStore
+    @State private var hovered: AppEntry.ID?
+
+    var body: some View {
+        GlassGroup(spacing: 10) {
+            HStack(spacing: 10) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(store.entries) { entry in
+                            shelfItem(entry)
                         }
+                    }
+                    .padding(8)
                 }
-            }
-        }
-        .listStyle(.sidebar)
-        .onDeleteCommand { if let id = store.selection { store.remove(id) } }
-        .safeAreaInset(edge: .bottom) {
-            if !store.entries.isEmpty {
-                HStack {
-                    Text("\(store.entries.count) \(store.entries.count == 1 ? "app" : "apps")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button("Aplicar Tudo") { store.applyAll() }
-                        .controlSize(.small)
+                .frame(maxWidth: 520)
+                .fixedSize(horizontal: true, vertical: false)
+                .glass(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+
+                Button {
+                    store.chooseApps()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.bar)
+                .buttonStyle(.plain)
+                .glass(in: Circle(), interactive: true)
+                .help("Adicionar app (⌘O)")
             }
         }
     }
-}
 
-struct SidebarRow: View {
-    @EnvironmentObject private var store: LibraryStore
-    let entry: AppEntry
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(nsImage: store.effectiveIcon(for: entry))
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(entry.displayName)
-                    .lineLimit(1)
-                if entry.displayName != entry.originalName {
-                    Text(entry.originalName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+    private func shelfItem(_ entry: AppEntry) -> some View {
+        let selected = store.selection == entry.id
+        return Button {
+            store.selection = entry.id
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(nsImage: store.effectiveIcon(for: entry))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 44, height: 44)
+                    .scaleEffect(hovered == entry.id ? 1.12 : 1)
+                if entry.hasPendingChanges {
+                    Circle().fill(Color.accentColor)
+                        .frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(.black.opacity(0.4), lineWidth: 1))
+                        .offset(x: 2, y: -2)
                 }
             }
-            Spacer(minLength: 0)
-            if entry.hasPendingChanges {
-                Circle()
-                    .fill(Color.accentColor)
-                    .frame(width: 7, height: 7)
-                    .help("Alterações não aplicadas")
-            }
+            .padding(5)
+            .background(selected ? Color.white.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 3)
-    }
-}
-
-struct EmptyStateView: View {
-    @EnvironmentObject private var store: LibraryStore
-
-    var body: some View {
-        ContentUnavailableView {
-            Label("Arraste um app para cá", systemImage: "square.and.arrow.down.on.square")
-        } description: {
-            Text("Escolha um novo nome e ícone. O Renicon cria um atalho que aparece no Spotlight, no Launchpad e no Dock — e o app original continua atualizando normalmente.")
-        } actions: {
-            Button("Escolher App…") { store.chooseApps() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 ? entry.id : (hovered == entry.id ? nil : hovered) }
+        .animation(.spring(duration: 0.2), value: hovered)
+        .help(entry.displayName)
+        .contextMenu {
+            Button("Aplicar") { store.apply(entry.id) }
+            Button("Mostrar Original no Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([entry.originalURL])
+            }
+            Divider()
+            Button("Remover do Renicon", role: .destructive) { store.remove(entry.id) }
         }
     }
 }

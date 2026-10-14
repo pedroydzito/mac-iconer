@@ -30,6 +30,16 @@ final class LibraryStore: ObservableObject {
            let decoded = try? JSONDecoder().decode([AppEntry].self, from: data) {
             entries = decoded
         }
+        removeOrphanIcons()
+    }
+
+    /// Apaga cópias de imagens que não pertencem a nenhum app da lista.
+    private func removeOrphanIcons() {
+        let valid = Set(entries.filter(\.hasCustomIcon).map { "\($0.id.uuidString).png" })
+        let files = (try? fm.contentsOfDirectory(at: iconsURL, includingPropertiesForKeys: nil)) ?? []
+        for file in files where !valid.contains(file.lastPathComponent) {
+            try? fm.removeItem(at: file)
+        }
     }
 
     private func save() {
@@ -165,6 +175,50 @@ final class LibraryStore: ObservableObject {
         if let image { setCustomIcon(image, for: id) } else { errorMessage = "Esse arquivo não é uma imagem válida." }
     }
 
+    /// Recebe o que foi arrastado para o ícone: arquivo de imagem, imagem vinda do
+    /// navegador ou um app (que é adicionado à lista).
+    func loadIcon(from providers: [NSItemProvider], for id: AppEntry.ID) -> Bool {
+        guard let provider = providers.first else { return false }
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url else { return }
+                Task { @MainActor in
+                    if url.pathExtension.lowercased() == "app" {
+                        self.add(urls: [url])
+                    } else {
+                        self.setCustomIcon(from: url, for: id)
+                    }
+                }
+            }
+            return true
+        }
+        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                guard let data else { return }
+                Task { @MainActor in
+                    if let image = NSImage(data: data) {
+                        self.setCustomIcon(image, for: id)
+                    } else {
+                        self.errorMessage = "Não foi possível ler essa imagem."
+                    }
+                }
+            }
+            return true
+        }
+        return false
+    }
+
+    func pasteIcon(for id: AppEntry.ID) {
+        let pasteboard = NSPasteboard.general
+        if let url = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL])?.first {
+            setCustomIcon(from: url, for: id)
+        } else if let image = NSImage(pasteboard: pasteboard) {
+            setCustomIcon(image, for: id)
+        } else {
+            errorMessage = "Não há nenhuma imagem copiada."
+        }
+    }
+
     func chooseIcon(for id: AppEntry.ID) {
         let panel = NSOpenPanel()
         panel.title = "Escolha uma imagem para o ícone"
@@ -245,6 +299,16 @@ final class LibraryStore: ObservableObject {
             throw NSError(domain: "Renicon", code: 1, userInfo: [NSLocalizedDescriptionKey:
                 "Sem permissão para alterar o ícone de \(entry.originalName). O atalho foi criado normalmente; dê ao Renicon “Acesso Total ao Disco” ou “Gerenciamento de Apps” em Ajustes do Sistema > Privacidade e Segurança."])
         }
+    }
+
+    func isInDock(_ entry: AppEntry) -> Bool {
+        entry.shortcutPath.map(DockManager.contains) ?? false
+    }
+
+    func pinToDock(_ id: AppEntry.ID) {
+        guard let entry = entries.first(where: { $0.id == id }), let path = entry.shortcutPath else { return }
+        DockManager.pin(shortcut: path, replacing: resolvedOriginalURL(for: entry)?.path, label: entry.displayName)
+        objectWillChange.send()
     }
 
     /// Força o Finder/Dock a reler o ícone de um pacote.

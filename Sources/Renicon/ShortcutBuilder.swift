@@ -22,9 +22,11 @@ enum ShortcutBuilder {
 
         let app = shortcutURL(for: entry)
         // Remove a versão anterior (inclusive se o nome mudou).
+        var renamedFrom: String?
         if let old = entry.shortcutPath, old != app.path, fm.fileExists(atPath: old) {
             try? Shell.run(lsregister, ["-u", old])
             try fm.removeItem(atPath: old)
+            renamedFrom = old
         }
         if fm.fileExists(atPath: app.path) { try fm.removeItem(at: app) }
 
@@ -67,6 +69,9 @@ enum ShortcutBuilder {
         try? Shell.run(lsregister, ["-f", app.path])
         try? Shell.run("/usr/bin/mdimport", [app.path])
         NSWorkspace.shared.noteFileSystemChanged(app.path)
+        if let renamedFrom {
+            DockManager.replace(path: renamedFrom, with: app.path, label: entry.displayName)
+        }
         return app
     }
 
@@ -74,6 +79,7 @@ enum ShortcutBuilder {
         guard let path = entry.shortcutPath, FileManager.default.fileExists(atPath: path) else { return }
         try? Shell.run(lsregister, ["-u", path])
         try? FileManager.default.removeItem(atPath: path)
+        DockManager.unpin(path)
     }
 
     private static func launcherScript(for entry: AppEntry) -> String {
@@ -82,14 +88,16 @@ enum ShortcutBuilder {
             return """
             #!/bin/sh
             # Gerado pelo Renicon. Abre o app pelo identificador; se falhar, usa o caminho.
-            /usr/bin/open -b \(shellQuote(bundleID)) "$@" 2>/dev/null || exec /usr/bin/open -a \(path) "$@"
+            /usr/bin/open -b \(shellQuote(bundleID)) "$@" 2>/dev/null || /usr/bin/open -a \(path) "$@" 2>/dev/null || \
+              /usr/bin/osascript -e 'display alert "O app original não foi encontrado" message "Abra o Renicon para verificar este atalho." as warning'
 
             """
         }
         return """
         #!/bin/sh
         # Gerado pelo Renicon.
-        exec /usr/bin/open -a \(path) "$@"
+        /usr/bin/open -a \(path) "$@" 2>/dev/null || \
+          /usr/bin/osascript -e 'display alert "O app original não foi encontrado" message "Abra o Renicon para verificar este atalho." as warning'
 
         """
     }

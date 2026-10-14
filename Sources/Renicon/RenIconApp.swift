@@ -14,7 +14,6 @@ struct RenIconApp: App {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(updater)
-                .frame(minWidth: 760, minHeight: 500)
                 .onAppear {
                     delegate.store = store
                     store.sync()
@@ -24,7 +23,8 @@ struct RenIconApp: App {
                     UpdateSheet(release: release).environmentObject(updater)
                 }
         }
-        .windowToolbarStyle(.unified)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 720, height: 680)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Procurar Atualizações…") { Task { await updater.check(userInitiated: true) } }
@@ -41,6 +41,7 @@ struct RenIconApp: App {
             SettingsView()
                 .environmentObject(store)
                 .environmentObject(updater)
+                .preferredColorScheme(.dark)
         }
 
         MenuBarExtra("Renicon", systemImage: "app.badge.checkmark", isInserted: $showMenuBar) {
