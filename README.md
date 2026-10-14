@@ -20,12 +20,7 @@ O Renicon consulta as Releases deste repositório ao abrir e a cada 6 horas. Qua
 
 ### Publicar uma nova versão (para o mantenedor)
 
-Crie uma tag com o número da versão e envie para o GitHub:
-
-```sh
-git tag v1.1.0
-git push origin v1.1.0
-```
+No GitHub, vá em **Actions › Build › Run workflow**, digite a versão (ex.: `1.1.0`) e clique em **Run workflow**. Também funciona enviando uma tag (`git tag v1.1.0 && git push origin v1.1.0`).
 
 O GitHub Actions compila o app, gera `Renicon.dmg` e `Renicon.zip` e publica a Release. Os apps já instalados recebem o aviso de atualização.
 

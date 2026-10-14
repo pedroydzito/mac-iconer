@@ -6,6 +6,10 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão a publicar (ex.: 1.0.0). Deixe vazio para só compilar."
+        required: false
 
 permissions:
   contents: write
@@ -18,8 +22,12 @@ jobs:
 
       - name: Definir versão
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          if [[ -n "${{ inputs.version }}" ]]; then
+            echo "VERSION=${{ inputs.version }}" >> "$GITHUB_ENV"
+            echo "PUBLISH=1" >> "$GITHUB_ENV"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "PUBLISH=1" >> "$GITHUB_ENV"
           else
             echo "VERSION=0.0.0-dev" >> "$GITHUB_ENV"
           fi
@@ -36,9 +44,13 @@ jobs:
             build/Renicon.zip
 
       - name: Publicar release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.PUBLISH == '1'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ env.VERSION }}
+          name: Renicon ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: |
             build/Renicon.dmg
             build/Renicon.zip
