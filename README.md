@@ -48,10 +48,14 @@ Uma atualização substitui o pacote do app e apaga esse ícone, por isso o Reni
 
 ## Recursos
 
-- Arrastar e soltar apps na janela (ou ⌘O para escolher)
-- Arrastar uma imagem (PNG, JPEG, HEIC, ICNS…) ou outro app sobre o ícone
-- Estilo **Formato macOS**: recorta qualquer imagem no formato padrão dos ícones do macOS, com margem e sombra
-- Pré-visualização antes/depois, busca, menu de contexto, ⌘S para aplicar, "Aplicar Tudo"
+- Visual escuro com **Liquid Glass** (macOS 26; nas versões 14/15 usa vidro translúcido)
+- Tela única: solte o app → clique no ícone para trocar → digite o nome → **Aplicar**
+- Ícone: clique, arraste uma imagem (inclusive direto do navegador) ou cole (⋯ › Colar Imagem)
+- A imagem é **copiada** para o Renicon: apagar o arquivo original não afeta nada; remover o app do Renicon apaga a cópia
+- Botão **Pôr no Dock**: fixa o atalho no Dock, no lugar do app original se ele estiver lá; ao renomear, o item do Dock acompanha
+- Detalhes e opções avançadas ficam no botão **ⓘ**
+- Estilo **Formato macOS**: recorta qualquer imagem no formato padrão dos ícones do macOS (evita a moldura cinza que o macOS 26 coloca em ícones fora do padrão)
+- Prateleira de apps estilo Dock na parte de baixo, ⌘S para aplicar, ⌘O para adicionar
 - Ajustes: abrir ao iniciar sessão, continuar rodando em segundo plano, ícone na barra de menus
 - Biblioteca salva em `~/Library/Application Support/Renicon`
 
@@ -71,8 +75,10 @@ Também dá para abrir a pasta no Xcode (`File › Open…` e escolher `Package.
 | Arquivo | Função |
 | --- | --- |
 | `RenIconApp.swift` | Cenas (janela, Ajustes, barra de menus) e observação de apps abrindo/fechando |
-| `ContentView.swift` | Barra lateral, estado vazio, arrastar e soltar |
-| `EditorView.swift` | Editor de nome e ícone |
+| `ContentView.swift` | Tela principal, estado vazio, prateleira de apps |
+| `EditorView.swift` | Editor de ícone e nome, painel ⓘ |
+| `Glass.swift` | Efeitos Liquid Glass (com alternativa para macOS 14/15) |
+| `DockManager.swift` | Fixar/atualizar atalhos no Dock |
 | `SettingsView.swift` | Ajustes |
 | `LibraryStore.swift` | Biblioteca, persistência e sincronização após atualizações |
 | `ShortcutBuilder.swift` | Gera o app atalho (Info.plist, launcher, .icns, assinatura, Spotlight) |
