@@ -58,7 +58,7 @@ final class LibraryStore: ObservableObject {
     func binding(for id: AppEntry.ID) -> Binding<AppEntry>? {
         guard entries.contains(where: { $0.id == id }) else { return nil }
         return Binding(
-            get: { self.entries.first(where: { $0.id == id }) ?? AppEntry(originalPath: "", originalName: "", customName: "") },
+            get: { self.entries.first(where: { $0.id == id }) ?? AppEntry(originalPath: "", bundleIdentifier: nil, originalName: "", customName: "") },
             set: { newValue in
                 if let i = self.entries.firstIndex(where: { $0.id == id }) {
                     var value = newValue
