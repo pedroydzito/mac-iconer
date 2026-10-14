@@ -1,0 +1,107 @@
+import AppKit
+
+/// Cria o "app atalho": um pacote .app leve, com nome e ícone próprios, que apenas
+/// abre o app original. Como ele aponta para o *bundle identifier* (e não para o
+/// arquivo), o app original pode ser atualizado ou movido sem quebrar nada.
+enum ShortcutBuilder {
+    static var folder: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications/Renicon", isDirectory: true)
+    }
+
+    private static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+    static func shortcutURL(for entry: AppEntry) -> URL {
+        folder.appendingPathComponent(sanitize(entry.displayName) + ".app", isDirectory: true)
+    }
+
+    @discardableResult
+    static func build(for entry: AppEntry, icon: NSImage) throws -> URL {
+        let fm = FileManager.default
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        let app = shortcutURL(for: entry)
+        // Remove a versão anterior (inclusive se o nome mudou).
+        if let old = entry.shortcutPath, old != app.path, fm.fileExists(atPath: old) {
+            try? Shell.run(lsregister, ["-u", old])
+            try fm.removeItem(atPath: old)
+        }
+        if fm.fileExists(atPath: app.path) { try fm.removeItem(at: app) }
+
+        let contents = app.appendingPathComponent("Contents")
+        let macOS = contents.appendingPathComponent("MacOS")
+        let resources = contents.appendingPathComponent("Resources")
+        try fm.createDirectory(at: macOS, withIntermediateDirectories: true)
+        try fm.createDirectory(at: resources, withIntermediateDirectories: true)
+
+        // Info.plist
+        let plist: [String: Any] = [
+            "CFBundleExecutable": "launcher",
+            "CFBundleIdentifier": "com.renicon.shortcut.\(entry.id.uuidString.lowercased())",
+            "CFBundleName": entry.displayName,
+            "CFBundleDisplayName": entry.displayName,
+            "CFBundleIconFile": "AppIcon",
+            "CFBundlePackageType": "APPL",
+            "CFBundleShortVersionString": "1.0",
+            "CFBundleVersion": "1",
+            "LSUIElement": true,
+            "NSHighResolutionCapable": true,
+            "RENOriginalBundleIdentifier": entry.bundleIdentifier ?? "",
+            "RENOriginalPath": entry.originalPath,
+        ]
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try data.write(to: contents.appendingPathComponent("Info.plist"))
+        try "APPL????".write(to: contents.appendingPathComponent("PkgInfo"), atomically: true, encoding: .utf8)
+
+        // Executável: abre o app original repassando argumentos/arquivos.
+        let launcher = macOS.appendingPathComponent("launcher")
+        try launcherScript(for: entry).write(to: launcher, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+
+        // Ícone
+        try IconRenderer.writeICNS(from: icon, style: entry.hasCustomIcon ? entry.iconStyle : .original,
+                                   to: resources.appendingPathComponent("AppIcon.icns"))
+
+        // Assinatura ad-hoc, registro no LaunchServices e indexação no Spotlight.
+        try? Shell.run("/usr/bin/codesign", ["--force", "--deep", "-s", "-", app.path])
+        try? Shell.run(lsregister, ["-f", app.path])
+        try? Shell.run("/usr/bin/mdimport", [app.path])
+        NSWorkspace.shared.noteFileSystemChanged(app.path)
+        return app
+    }
+
+    static func remove(_ entry: AppEntry) {
+        guard let path = entry.shortcutPath, FileManager.default.fileExists(atPath: path) else { return }
+        try? Shell.run(lsregister, ["-u", path])
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
+    private static func launcherScript(for entry: AppEntry) -> String {
+        let path = shellQuote(entry.originalPath)
+        if let bundleID = entry.bundleIdentifier, !bundleID.isEmpty {
+            return """
+            #!/bin/sh
+            # Gerado pelo Renicon. Abre o app pelo identificador; se falhar, usa o caminho.
+            /usr/bin/open -b \(shellQuote(bundleID)) "$@" 2>/dev/null || exec /usr/bin/open -a \(path) "$@"
+
+            """
+        }
+        return """
+        #!/bin/sh
+        # Gerado pelo Renicon.
+        exec /usr/bin/open -a \(path) "$@"
+
+        """
+    }
+
+    private static func shellQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    static func sanitize(_ name: String) -> String {
+        let cleaned = name.replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "Atalho" : cleaned
+    }
+}
