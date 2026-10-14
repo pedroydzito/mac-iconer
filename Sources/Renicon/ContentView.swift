@@ -1,3 +1,4 @@
+import RenCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -91,6 +92,33 @@ struct ContentView: View {
                 }
             }
         }
+        .overlay(alignment: .top) {
+            if store.needsAppManagement && store.errorMessage == nil {
+                HStack(spacing: 12) {
+                    Image(systemName: "lock.shield.fill").foregroundStyle(.yellow)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Falta uma permissão para trocar o ícone do app original")
+                            .font(.callout.weight(.semibold))
+                        Text("Ligue o Renicon em Gerenciamento de Apps. O atalho já foi criado.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Button("Abrir Ajustes") { store.openAppManagementSettings() }
+                        .glassButton(prominent: true)
+                    Button {
+                        store.needsAppManagement = false
+                    } label: { Image(systemName: "xmark").font(.caption.weight(.bold)) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Fechar aviso")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .glass(in: RoundedRectangle(cornerRadius: 16, style: .continuous), tint: .yellow.opacity(0.2))
+                .padding(.top, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.35), value: store.needsAppManagement)
         .overlay(alignment: .bottom) {
             if let toast = store.toast {
                 Label(toast, systemImage: "checkmark.circle.fill")

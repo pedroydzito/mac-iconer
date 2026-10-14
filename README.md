@@ -48,7 +48,9 @@ Ou seja: abra o Renicon, ajuste, clique em **Aplicar** e feche. Se o Dock demora
 
 ### Nome e ícone no Dock
 
-O app original **nunca é renomeado, movido ou reassinado** — instaladores e atualizadores (como o Creative Cloud) continuam encontrando o app normalmente. No Dock fica fixado o **atalho**, que sempre mostra o seu nome e ícone. Com o app aberto, o macOS mostra ao lado o app em execução com o nome original; ao fechar, fica só o atalho.
+O app original **nunca é renomeado, movido ou reassinado**: instaladores e atualizadores (como o Creative Cloud) continuam encontrando o app normalmente.
+
+Regra do Dock: **app fechado → o atalho** (seu nome e ícone); **app aberto, por qualquer caminho (Dock, Spotlight, Finder) → o próprio app, no mesmo lugar**. Ao fechar, o atalho volta para a mesma posição. Quem faz a troca é um ajudante invisível (`~/Library/LaunchAgents/com.renicon.dockhelper.plist`) que fica parado até o macOS avisar que um app abriu ou fechou. Cada troca reinicia o Dock rapidamente (o macOS não permite mudar o Dock de outra forma).
 
 ### Limitações honestas
 
@@ -92,7 +94,9 @@ Também dá para abrir a pasta no Xcode (`File › Open…` e escolher `Package.
 | `ContentView.swift` | Tela principal, estado vazio, prateleira de apps |
 | `EditorView.swift` | Editor de ícone e nome, painel ⓘ |
 | `Glass.swift` | Efeitos Liquid Glass (com alternativa para macOS 14/15) |
-| `DockManager.swift` | Fixar/atualizar atalhos no Dock |
+| `RenCore/DockManager.swift` | Edição do Dock (fixar, trocar na mesma posição) |
+| `RenDockHelper/main.swift` | Ajudante que troca atalho ⇄ app quando o app abre/fecha |
+| `DockHelperInstaller.swift` | Instala/atualiza o ajudante |
 | `SettingsView.swift` | Ajustes |
 | `LibraryStore.swift` | Biblioteca, persistência e sincronização após atualizações |
 | `ShortcutBuilder.swift` | Gera o app atalho (Info.plist, launcher, .icns, assinatura, Spotlight) |

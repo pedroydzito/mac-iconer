@@ -1,3 +1,4 @@
+import RenCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -37,6 +38,12 @@ struct EditorView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help("Aplica o ícone ao app original. Reaplicado sozinho depois de atualizações.")
+
+                if entry.applyIconToOriginal && store.drawsOwnIcon(entry) {
+                    Label("Este app pode mostrar o próprio ícone enquanto está aberto.", systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             }
 

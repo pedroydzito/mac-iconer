@@ -1,3 +1,4 @@
+import RenCore
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -9,6 +10,8 @@ final class LibraryStore: ObservableObject {
     @Published var errorMessage: String?
     /// Aviso curto e discreto (ex.: "Aplicado").
     @Published var toast: String?
+    /// O macOS bloqueou a troca do ícone no app original: falta a permissão "Gerenciamento de Apps".
+    @Published var needsAppManagement = false
     @Published var loadingSuggestions: Set<AppEntry.ID> = []
     @Published var busy = false
     /// Desfazer/refazer (⌘Z / ⇧⌘Z) da janela principal.
@@ -403,7 +406,12 @@ final class LibraryStore: ObservableObject {
             current.hasPendingChanges = !unchanged
             entries[j] = current
             updateAutoReapply()
-            try applyToOriginalIfNeeded(current, force: true)
+            do {
+                try applyToOriginalIfNeeded(current, force: true)
+            } catch {
+                // O atalho foi criado; só o ícone do app original precisa de permissão.
+                needsAppManagement = true
+            }
             if let path = url?.path, DockManager.contains(path) {
                 // O atalho já está no Dock: atualiza a etiqueta com o nome novo.
                 let label = current.displayName
@@ -486,6 +494,33 @@ final class LibraryStore: ObservableObject {
         for id in entries.map(\.id) { await apply(id) }
     }
 
+    /// Abre Ajustes do Sistema › Privacidade e Segurança › Gerenciamento de Apps.
+    func openAppManagementSettings() {
+        let urls = ["x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AppBundles",
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles"]
+        for string in urls {
+            if let url = URL(string: string), NSWorkspace.shared.open(url) { return }
+        }
+    }
+
+    /// O app usa um ícone de catálogo (Assets.car): com ele aberto, o Dock pode mostrar o ícone dele.
+    func drawsOwnIcon(_ entry: AppEntry) -> Bool {
+        guard let url = resolvedOriginalURL(for: entry), let bundle = Bundle(url: url) else { return false }
+        return bundle.object(forInfoDictionaryKey: "CFBundleIconName") != nil
+            && bundle.object(forInfoDictionaryKey: "CFBundleIconFile") == nil
+    }
+
+    /// Desfaz tudo (atalhos, ícones, Dock, ajudante) e move o Renicon para o Lixo.
+    func uninstall() {
+        removeAll()
+        DockHelperInstaller.uninstall()
+        try? fm.removeItem(at: supportURL)
+        try? fm.removeItem(at: ShortcutBuilder.legacyFolder)
+        UserDefaults.standard.removePersistentDomain(forName: Bundle.main.bundleIdentifier ?? "com.renicon.app")
+        try? fm.trashItem(at: Bundle.main.bundleURL, resultingItemURL: nil)
+        NSApp.terminate(nil)
+    }
+
     /// Remove todos os atalhos, devolve os ícones originais e apaga a regra do launchd.
     func removeAll() {
         for id in entries.map(\.id) { remove(id) }
@@ -549,6 +584,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func isInDock(_ entry: AppEntry) -> Bool {
+        if isRunning(entry), let original = resolvedOriginalURL(for: entry)?.path, DockManager.contains(original) { return true }
         guard let target = dockTarget(for: entry), DockManager.contains(target) else { return false }
         // Se o atalho também está fixado junto do original, ainda há o que arrumar.
         if target != entry.shortcutPath, let shortcut = entry.shortcutPath, DockManager.contains(shortcut) { return false }
@@ -565,6 +601,8 @@ final class LibraryStore: ObservableObject {
         defer { busy = false }
         await Task.detached { DockManager.pin(target, replacing: others, label: label) }.value
         objectWillChange.send()
+        // Se o app estiver aberto agora, o ajudante põe o app no lugar do atalho.
+        updateDockHelper()
         let pinned = DockManager.contains(target)
         if !pinned { errorMessage = "O Dock não aceitou a mudança. Tente de novo em alguns segundos." }
         return pinned
@@ -603,6 +641,25 @@ final class LibraryStore: ObservableObject {
             items.append(.init(id: entry.id.uuidString, bundleID: entry.bundleIdentifier, path: path, icon: iconPath, name: nil))
         }
         AutoReapply.update(items)
+        updateDockHelper()
+    }
+
+    /// Lista para o ajudante do Dock: atalho fechado ⇄ app aberto, sempre na mesma posição.
+    func updateDockHelper() {
+        let items: [DockSwapItem] = entries.compactMap { entry in
+            guard entry.lastApplied != nil, let shortcut = entry.shortcutPath,
+                  let bundleID = entry.bundleIdentifier else { return nil }
+            let original = resolvedOriginalURL(for: entry)?.path ?? entry.originalPath
+            return DockSwapItem(bundleID: bundleID, shortcut: shortcut, original: original,
+                                originalLabel: entry.originalName, shortcutLabel: entry.displayName)
+        }
+        DockHelperInstaller.update(items)
+    }
+
+    /// Está no Dock: o atalho, ou o próprio app enquanto ele está aberto (trocado pelo ajudante).
+    private func isRunning(_ entry: AppEntry) -> Bool {
+        guard let id = entry.bundleIdentifier else { return false }
+        return !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty
     }
 
 

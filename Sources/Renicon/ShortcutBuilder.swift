@@ -1,3 +1,4 @@
+import RenCore
 import AppKit
 
 /// Cria o "app atalho": um pacote .app leve, com nome e ícone próprios, que apenas

@@ -1,3 +1,4 @@
+import RenCore
 import AppKit
 
 enum IconStyle: String, Codable, CaseIterable, Identifiable {

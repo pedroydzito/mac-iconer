@@ -1,3 +1,4 @@
+import RenCore
 import AppKit
 
 enum IconRenderer {

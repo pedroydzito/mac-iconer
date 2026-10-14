@@ -1,7 +1,7 @@
 import Foundation
 
 /// Edita os itens fixados no Dock (preferências com.apple.dock › persistent-apps).
-enum DockManager {
+public enum DockManager {
     private static let domain = "com.apple.dock" as CFString
     private static let key = "persistent-apps" as CFString
     /// Uma alteração por vez: cada uma lê, muda, grava e reinicia o Dock.
@@ -51,13 +51,13 @@ enum DockManager {
         ]
     }
 
-    static func contains(_ appPath: String) -> Bool {
+    public static func contains(_ appPath: String) -> Bool {
         persistentApps().contains { path(of: $0) == normalize(appPath) }
     }
 
     /// Fixa `target` no Dock com a etiqueta `label`. Se algum dos caminhos em `replacing`
     /// já estiver fixado, o novo item ocupa o lugar dele (e duplicatas são removidas).
-    static func pin(_ target: String, replacing others: [String], label: String) {
+    public static func pin(_ target: String, replacing others: [String], label: String) {
         lock.lock()
         defer { lock.unlock() }
         var apps = persistentApps()
@@ -76,7 +76,7 @@ enum DockManager {
 
     /// Atualiza a etiqueta de um item já fixado. Retorna se havia algo para mudar.
     @discardableResult
-    static func relabel(_ appPath: String, label: String) -> Bool {
+    public static func relabel(_ appPath: String, label: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         var apps = persistentApps()
@@ -90,16 +90,45 @@ enum DockManager {
     }
 
     /// Quando o atalho é renomeado, o item fixado passa a apontar para o novo caminho.
-    static func replace(path old: String, with new: String, label: String) {
+    @discardableResult
+    public static func replace(path old: String, with new: String, label: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
         var apps = persistentApps()
-        guard let index = apps.firstIndex(where: { path(of: $0) == normalize(old) }) else { return }
+        guard let index = apps.firstIndex(where: { path(of: $0) == normalize(old) }) else { return false }
+        // Se o destino já está no Dock, só remove o item antigo (sem duplicar).
+        if apps.contains(where: { path(of: $0) == normalize(new) }) {
+            apps.remove(at: index)
+            save(apps)
+            return true
+        }
         apps[index] = tile(for: new, label: label)
         save(apps)
+        return true
     }
 
-    static func unpin(_ appPath: String) {
+    /// Várias trocas de uma vez, com um único reinício do Dock. Cada troca põe `new` no lugar
+    /// exato de `old` (ou só remove `old` se `new` já estiver no Dock). Retorna se algo mudou.
+    @discardableResult
+    public static func replaceMany(_ changes: [(old: String, new: String, label: String)]) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        var apps = persistentApps()
+        var changed = false
+        for change in changes {
+            guard let index = apps.firstIndex(where: { path(of: $0) == normalize(change.old) }) else { continue }
+            if apps.contains(where: { path(of: $0) == normalize(change.new) }) {
+                apps.remove(at: index)
+            } else {
+                apps[index] = tile(for: change.new, label: change.label)
+            }
+            changed = true
+        }
+        if changed { save(apps) }
+        return changed
+    }
+
+    public static func unpin(_ appPath: String) {
         lock.lock()
         defer { lock.unlock() }
         var apps = persistentApps()

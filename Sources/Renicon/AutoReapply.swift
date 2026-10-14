@@ -1,3 +1,4 @@
+import RenCore
 import AppKit
 
 /// Mantém o ícone personalizado no app original *sem o Renicon estar aberto*.

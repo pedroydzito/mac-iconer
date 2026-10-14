@@ -1,3 +1,4 @@
+import RenCore
 import AppKit
 
 /// Busca ícones do mesmo app na App Store (Mac e iPhone/iPad), como o IconSur faz.

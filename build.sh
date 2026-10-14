@@ -13,6 +13,7 @@ rm -rf build
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Renicon"
 cp "$(dirname "$BIN")/RenLauncher" "$APP/Contents/Resources/RenLauncher"
+cp "$(dirname "$BIN")/RenDockHelper" "$APP/Contents/Resources/RenDockHelper"
 sed -e "s/__VERSION__/$VERSION/g" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 
 # Ícone do app

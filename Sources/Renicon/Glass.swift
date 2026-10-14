@@ -1,3 +1,4 @@
+import RenCore
 import SwiftUI
 
 // Liquid Glass no macOS 26+; material translúcido nas versões anteriores.
