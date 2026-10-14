@@ -103,14 +103,20 @@ final class Updater: ObservableObject {
             try fm.moveItem(at: downloaded, to: zip)
 
             phase = .installing
-            try Shell.run("/usr/bin/ditto", ["-x", "-k", zip.path, work.path])
+            let current = Bundle.main.bundleURL
+            if current.path.contains("/AppTranslocation/") || current.path.hasPrefix("/Volumes/") {
+                throw NSError(domain: "Renicon", code: 4, userInfo: [NSLocalizedDescriptionKey:
+                    "Mova o Renicon para a pasta Aplicativos antes de atualizar."])
+            }
+            try await Task.detached {
+                try Shell.run("/usr/bin/ditto", ["-x", "-k", zip.path, work.path])
+            }.value
             guard let newApp = try fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)
                 .first(where: { $0.pathExtension == "app" }) else {
                 throw NSError(domain: "Renicon", code: 2, userInfo: [NSLocalizedDescriptionKey: "O arquivo da atualização não contém o app."])
             }
             try? Shell.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", newApp.path])
 
-            let current = Bundle.main.bundleURL
             guard fm.isWritableFile(atPath: current.deletingLastPathComponent().path) else {
                 throw NSError(domain: "Renicon", code: 3, userInfo: [NSLocalizedDescriptionKey: "Sem permissão para substituir o app em \(current.deletingLastPathComponent().path)."])
             }
@@ -131,10 +137,22 @@ final class Updater: ObservableObject {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = [scriptURL.path, newApp.path, current.path, work.path]
             try process.run()
-            NSApp.terminate(nil)
+            relaunch()
         } catch {
             phase = .failed(error.localizedDescription)
         }
+    }
+
+    /// Fecha o Renicon para o instalador trocar o app. Fecha a janela de atualização
+    /// antes (com ela aberta o macOS pode ignorar o pedido) e, se ainda assim o app
+    /// não fechar, encerra o processo.
+    private func relaunch() {
+        available = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            NSApp.windows.forEach { $0.close() }
+            NSApp.terminate(nil)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { exit(0) }
     }
 
     static func isVersion(_ a: String, newerThan b: String) -> Bool {

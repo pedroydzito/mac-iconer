@@ -61,7 +61,8 @@ enum ShortcutBuilder {
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
 
         // Ícone
-        try IconRenderer.writeICNS(from: icon, style: entry.hasCustomIcon ? entry.iconStyle : .original,
+        // `icon` já vem estilizado pelo LibraryStore.
+        try IconRenderer.writeICNS(from: icon, style: .original,
                                    to: resources.appendingPathComponent("AppIcon.icns"))
 
         // Assinatura ad-hoc, registro no LaunchServices e indexação no Spotlight.
@@ -86,7 +87,13 @@ enum ShortcutBuilder {
         let script = launcherBody(for: entry)
         guard entry.applyIconToOriginal else { return script }
         // Antes de abrir, recoloca o ícone no app original se uma atualização o removeu.
-        let reapply = "/usr/bin/osascript -l JavaScript \(shellQuote(AutoReapply.scriptURL.path)) \(entry.id.uuidString) >/dev/null 2>&1\n"
+        // A checagem em shell é instantânea; o script só roda quando o ícone sumiu.
+        let reapply = """
+        if [ ! -e \(shellQuote(entry.originalPath))/"$(printf 'Icon\\r')" ]; then
+          /usr/bin/osascript -l JavaScript \(shellQuote(AutoReapply.scriptURL.path)) \(entry.id.uuidString) >/dev/null 2>&1
+        fi
+
+        """
         return script.replacingOccurrences(of: "#!/bin/sh\n", with: "#!/bin/sh\n" + reapply)
     }
 
@@ -117,7 +124,7 @@ enum ShortcutBuilder {
     static func sanitize(_ name: String) -> String {
         let cleaned = name.replacingOccurrences(of: "/", with: "-")
             .replacingOccurrences(of: ":", with: "-")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
         return cleaned.isEmpty ? "Atalho" : cleaned
     }
 }

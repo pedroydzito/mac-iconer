@@ -41,7 +41,9 @@ enum AutoReapply {
             try? fm.removeItem(at: agentURL)
             return
         }
-        let folders = Set(items.map { ($0.path as NSString).deletingLastPathComponent })
+        // A pasta do app (quando ele é substituído) e o Info.plist (quando é atualizado por dentro).
+        let folders = Set(items.flatMap { [($0.path as NSString).deletingLastPathComponent,
+                                           ($0.path as NSString).appendingPathComponent("Contents/Info.plist")] })
         let plist: [String: Any] = [
             "Label": label,
             "ProgramArguments": ["/usr/bin/osascript", "-l", "JavaScript", scriptURL.path],

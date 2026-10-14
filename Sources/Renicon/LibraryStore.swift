@@ -23,10 +23,16 @@ final class LibraryStore: ObservableObject {
             .appendingPathComponent("Renicon", isDirectory: true)
         try? fm.createDirectory(at: iconsURL, withIntermediateDirectories: true)
         if let data = try? Data(contentsOf: databaseURL),
-           let decoded = try? JSONDecoder().decode([AppEntry].self, from: data) {
+           let decoded = try? Self.decoder.decode([AppEntry].self, from: data) {
             entries = decoded
         }
         removeOrphanIcons()
+    }
+
+    private static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 
     /// Apaga cópias de imagens que não pertencem a nenhum app da lista.
@@ -103,10 +109,11 @@ final class LibraryStore: ObservableObject {
 
     /// Ícone final (já estilizado) que o atalho vai usar.
     func effectiveIcon(for entry: AppEntry) -> NSImage {
-        let key = "\(entry.id)-\(entry.iconStyle.rawValue)"
+        let key = "\(entry.id.uuidString)-\(entry.iconStyle.rawValue)-\(entry.adjustments.zoom)-\(entry.adjustments.background)"
         if entry.hasCustomIcon, let cached = styledIconCache[key] { return cached }
         if let custom = customIcon(for: entry) {
-            let styled = IconRenderer.styledImage(custom, style: entry.iconStyle)
+            let styled = IconRenderer.styledImage(custom, style: entry.iconStyle, adjustments: entry.adjustments)
+            clearStyledCache(for: entry.id)
             styledIconCache[key] = styled
             return styled
         }
@@ -237,26 +244,55 @@ final class LibraryStore: ObservableObject {
 
     // MARK: - Aplicar
 
-    func apply(_ id: AppEntry.ID) {
-        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+    /// Cria/atualiza o atalho. O trabalho pesado (ícones, assinatura) roda fora da
+    /// thread principal para a interface não travar.
+    @discardableResult
+    func apply(_ id: AppEntry.ID) async -> Bool {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return false }
+        var entry = entries[i]
+        let name = ShortcutBuilder.sanitize(entry.displayName).lowercased()
+        if let other = entries.first(where: { $0.id != id && ShortcutBuilder.sanitize($0.displayName).lowercased() == name }) {
+            errorMessage = "Já existe um app chamado “\(other.displayName)” no Renicon. Escolha outro nome."
+            return false
+        }
         busy = true
         defer { busy = false }
-        var entry = entries[i]
         if let current = resolvedOriginalURL(for: entry) { entry.originalPath = current.path }
+        let icon = effectiveIcon(for: entry)
+        let snapshot = entry
         do {
-            let url = try ShortcutBuilder.build(for: entry, icon: effectiveIcon(for: entry))
-            entry.shortcutPath = url.path
-            entry.lastApplied = Date()
-            entry.hasPendingChanges = false
-            entries[i] = entry
+            let url = try await Task.detached(priority: .userInitiated) {
+                try ShortcutBuilder.build(for: snapshot, icon: icon)
+            }.value
+            guard let j = entries.firstIndex(where: { $0.id == id }) else { return false }
+            // Mantém edições feitas enquanto aplicava; só marca como aplicado se nada mudou.
+            var current = entries[j]
+            current.shortcutPath = url.path
+            current.originalPath = entry.originalPath
+            current.lastApplied = Date()
+            let unchanged = current.customName == snapshot.customName && current.iconStyle == snapshot.iconStyle
+                && current.adjustments == snapshot.adjustments && current.hasCustomIcon == snapshot.hasCustomIcon
+                && current.applyIconToOriginal == snapshot.applyIconToOriginal
+            current.hasPendingChanges = !unchanged
+            entries[j] = current
             updateAutoReapply()
-            try applyToOriginalIfNeeded(entry, force: true)
+            try applyToOriginalIfNeeded(current, force: true)
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 
-    func applyAll() { entries.map(\.id).forEach(apply) }
+    func applyAll() async {
+        for id in entries.map(\.id) { await apply(id) }
+    }
+
+    /// Remove todos os atalhos, devolve os ícones originais e apaga a regra do launchd.
+    func removeAll() {
+        for id in entries.map(\.id) { remove(id) }
+        AutoReapply.update([])
+    }
 
     func remove(_ id: AppEntry.ID) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
@@ -293,7 +329,7 @@ final class LibraryStore: ObservableObject {
         // Quando o app é atualizado, o pacote é substituído e esse arquivo some.
         let marker = url.appendingPathComponent("Icon\r").path
         if !force && fm.fileExists(atPath: marker) { return }
-        let styled = IconRenderer.styledImage(custom, style: entry.iconStyle, size: 1024)
+        let styled = IconRenderer.styledImage(custom, style: entry.iconStyle, adjustments: entry.adjustments, size: 1024)
         if NSWorkspace.shared.setIcon(styled, forFile: url.path, options: []) {
             refreshIcon(at: url)
         } else {
@@ -334,7 +370,7 @@ final class LibraryStore: ObservableObject {
         var items: [AutoReapply.Item] = []
         for entry in entries where entry.applyIconToOriginal && entry.lastApplied != nil {
             guard let custom = customIcon(for: entry),
-                  let data = IconRenderer.pngData(for: custom, size: 1024, style: entry.iconStyle) else { continue }
+                  let data = IconRenderer.pngData(for: custom, size: 1024, style: entry.iconStyle, adjustments: entry.adjustments) else { continue }
             let url = styledIconURL(for: entry)
             try? data.write(to: url, options: .atomic)
             let path = resolvedOriginalURL(for: entry)?.path ?? entry.originalPath

@@ -59,6 +59,8 @@ Ou seja: abra o Renicon, ajuste, clique em **Aplicar** e feche. Se o Dock demora
 - A imagem é **copiada** para o Renicon: apagar o arquivo original não afeta nada; remover o app do Renicon apaga a cópia
 - Botão **Pôr no Dock**: fixa o atalho no Dock, no lugar do app original se ele estiver lá; ao renomear, o item do Dock acompanha
 - Detalhes e opções avançadas ficam no botão **ⓘ**
+- Zoom e cor de fundo do ícone (botão ⓘ)
+- Aviso de nome duplicado, confirmação ao remover, **Remover Todos os Atalhos** nos Ajustes (use antes de desinstalar)
 - Estilo **Formato macOS**: recorta qualquer imagem no formato padrão dos ícones do macOS (evita a moldura cinza que o macOS 26 coloca em ícones fora do padrão)
 - Prateleira de apps estilo Dock na parte de baixo, ⌘S para aplicar, ⌘O para adicionar
 - Biblioteca salva em `~/Library/Application Support/Renicon`
@@ -78,7 +80,7 @@ Também dá para abrir a pasta no Xcode (`File › Open…` e escolher `Package.
 
 | Arquivo | Função |
 | --- | --- |
-| `RenIconApp.swift` | Cenas (janela, Ajustes, barra de menus) e observação de apps abrindo/fechando |
+| `RenIconApp.swift` | Janela, Ajustes, menus e oferta de mover para Aplicativos |
 | `ContentView.swift` | Tela principal, estado vazio, prateleira de apps |
 | `EditorView.swift` | Editor de ícone e nome, painel ⓘ |
 | `Glass.swift` | Efeitos Liquid Glass (com alternativa para macOS 14/15) |

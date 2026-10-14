@@ -2,7 +2,7 @@ import AppKit
 
 enum IconRenderer {
     /// Renderiza a imagem num quadrado de `size` pixels, aplicando o estilo escolhido.
-    static func pngData(for image: NSImage, size: Int, style: IconStyle) -> Data? {
+    static func pngData(for image: NSImage, size: Int, style: IconStyle, adjustments: IconAdjustments = IconAdjustments()) -> Data? {
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -21,20 +21,20 @@ enum IconRenderer {
         case .original:
             image.draw(in: aspectFill(image.size, in: canvas, fit: true), from: .zero, operation: .sourceOver, fraction: 1)
         case .macOS:
-            draw(image, macOSStyleIn: canvas)
+            draw(image, macOSStyleIn: canvas, adjustments: adjustments)
         }
         return rep.representation(using: .png, properties: [:])
     }
 
     /// Gera uma NSImage já estilizada (usada nas pré-visualizações).
-    static func styledImage(_ image: NSImage, style: IconStyle, size: Int = 512) -> NSImage {
-        guard let data = pngData(for: image, size: size, style: style),
+    static func styledImage(_ image: NSImage, style: IconStyle, adjustments: IconAdjustments = IconAdjustments(), size: Int = 512) -> NSImage {
+        guard let data = pngData(for: image, size: size, style: style, adjustments: adjustments),
               let result = NSImage(data: data) else { return image }
         return result
     }
 
     /// Grade de ícones do macOS (Big Sur+): corpo de 824/1024 com cantos de ~185/1024.
-    private static func draw(_ image: NSImage, macOSStyleIn canvas: NSRect) {
+    private static func draw(_ image: NSImage, macOSStyleIn canvas: NSRect, adjustments: IconAdjustments) {
         let scale = canvas.width / 1024
         let body = NSRect(x: 100 * scale, y: 100 * scale + 6 * scale, width: 824 * scale, height: 824 * scale)
         let path = NSBezierPath(roundedRect: body, xRadius: 185 * scale, yRadius: 185 * scale)
@@ -45,13 +45,16 @@ enum IconRenderer {
         shadow.shadowOffset = NSSize(width: 0, height: -10 * scale)
         shadow.shadowBlurRadius = 20 * scale
         shadow.set()
-        NSColor.white.setFill()
+        adjustments.backgroundColor.setFill()
         path.fill()
         NSGraphicsContext.restoreGraphicsState()
 
         NSGraphicsContext.saveGraphicsState()
         path.addClip()
-        image.draw(in: aspectFill(image.size, in: body, fit: false), from: .zero, operation: .sourceOver, fraction: 1)
+        let zoom = CGFloat(min(max(adjustments.zoom, 0.3), 2))
+        let target = body.insetBy(dx: body.width * (1 - zoom) / 2, dy: body.height * (1 - zoom) / 2)
+        // Abaixo de 100% a imagem inteira cabe (com margem); acima, ela é aproximada.
+        image.draw(in: aspectFill(image.size, in: target, fit: zoom < 1), from: .zero, operation: .sourceOver, fraction: 1)
         NSGraphicsContext.restoreGraphicsState()
     }
 
@@ -64,7 +67,7 @@ enum IconRenderer {
     }
 
     /// Cria um arquivo .icns com todos os tamanhos exigidos pelo macOS.
-    static func writeICNS(from image: NSImage, style: IconStyle, to destination: URL) throws {
+    static func writeICNS(from image: NSImage, style: IconStyle, adjustments: IconAdjustments = IconAdjustments(), to destination: URL) throws {
         let fm = FileManager.default
         let iconset = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".iconset")
         try fm.createDirectory(at: iconset, withIntermediateDirectories: true)
@@ -73,7 +76,7 @@ enum IconRenderer {
         for base in [16, 32, 128, 256, 512] {
             for scale in [1, 2] {
                 let name = scale == 1 ? "icon_\(base)x\(base).png" : "icon_\(base)x\(base)@2x.png"
-                guard let data = pngData(for: image, size: base * scale, style: style) else {
+                guard let data = pngData(for: image, size: base * scale, style: style, adjustments: adjustments) else {
                     throw CocoaError(.fileWriteUnknown)
                 }
                 try data.write(to: iconset.appendingPathComponent(name))

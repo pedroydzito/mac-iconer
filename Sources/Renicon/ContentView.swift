@@ -99,6 +99,7 @@ struct EmptyDropView: View {
 struct AppShelf: View {
     @EnvironmentObject private var store: LibraryStore
     @State private var hovered: AppEntry.ID?
+    @State private var pendingRemoval: AppEntry?
 
     var body: some View {
         GlassGroup(spacing: 10) {
@@ -111,8 +112,7 @@ struct AppShelf: View {
                     }
                     .padding(8)
                 }
-                .frame(maxWidth: 520)
-                .fixedSize(horizontal: true, vertical: false)
+                .frame(width: min(CGFloat(store.entries.count) * 60 + 10, 520))
                 .glass(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
                 Button {
@@ -157,12 +157,22 @@ struct AppShelf: View {
         .animation(.spring(duration: 0.2), value: hovered)
         .help(entry.displayName)
         .contextMenu {
-            Button("Aplicar") { store.apply(entry.id) }
+            Button("Aplicar") { Task { await store.apply(entry.id) } }
             Button("Mostrar Original no Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([entry.originalURL])
             }
             Divider()
-            Button("Remover do Renicon", role: .destructive) { store.remove(entry.id) }
+            Button("Remover do Renicon…", role: .destructive) { pendingRemoval = entry }
+        }
+        .confirmationDialog(
+            "Remover “\(pendingRemoval?.displayName ?? "")”?",
+            isPresented: Binding(get: { pendingRemoval?.id == entry.id }, set: { if !$0 { pendingRemoval = nil } })
+        ) {
+            Button("Remover", role: .destructive) {
+                if let id = pendingRemoval?.id { store.remove(id) }
+            }
+        } message: {
+            Text("O atalho é apagado e o app original volta a ter o nome e o ícone de sempre.")
         }
     }
 }

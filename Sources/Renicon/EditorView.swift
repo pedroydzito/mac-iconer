@@ -24,7 +24,7 @@ struct EditorView: View {
                 .glass(in: Circle(), interactive: true)
                 .help("Detalhes e opções")
                 .popover(isPresented: $showInfo, arrowEdge: .bottom) {
-                    InfoPanel(entry: $entry)
+                    InfoPanel(entry: $entry) { showInfo = false }
                 }
             }
             .padding(.horizontal, 22)
@@ -101,7 +101,7 @@ struct EditorView: View {
 
     private func applyNow() {
         nameFocused = false
-        store.apply(entry.id)
+        Task { await store.apply(entry.id) }
     }
 }
 
@@ -230,6 +230,8 @@ private struct NameField: View {
 private struct InfoPanel: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var entry: AppEntry
+    var dismiss: () -> Void
+    @State private var confirmRemoval = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -243,6 +245,27 @@ private struct InfoPanel: View {
                 .disabled(!entry.hasCustomIcon)
                 Text("“Formato macOS” recorta a imagem no formato padrão dos ícones do Mac.")
                     .font(.caption).foregroundStyle(.secondary)
+
+                if entry.hasCustomIcon && entry.iconStyle == .macOS {
+                    HStack(spacing: 10) {
+                        Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
+                        Slider(value: $entry.adjustments.zoom, in: 0.5...1.6)
+                        Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
+                        Text("\(Int(entry.adjustments.zoom * 100))%")
+                            .monospacedDigit().font(.caption).frame(width: 38, alignment: .trailing)
+                    }
+                    HStack {
+                        ColorPicker("Cor de fundo", selection: Binding(
+                            get: { Color(nsColor: entry.adjustments.backgroundColor) },
+                            set: { entry.adjustments.background = NSColor($0).hexString }
+                        ), supportsOpacity: false)
+                        Spacer()
+                        Button("Redefinir") { entry.adjustments = IconAdjustments() }
+                            .controlSize(.small)
+                            .disabled(entry.adjustments == IconAdjustments())
+                    }
+                    .font(.callout)
+                }
             }
 
             Toggle(isOn: Binding(
@@ -280,8 +303,17 @@ private struct InfoPanel: View {
                     }
                 }
                 Spacer()
-                Button("Remover", role: .destructive) { store.remove(entry.id) }
+                Button("Remover…", role: .destructive) { confirmRemoval = true }
                     .foregroundStyle(.red)
+                    .confirmationDialog("Remover “\(entry.displayName)”?", isPresented: $confirmRemoval) {
+                        Button("Remover", role: .destructive) {
+                            let id = entry.id
+                            dismiss()
+                            store.remove(id)
+                        }
+                    } message: {
+                        Text("O atalho é apagado e o app original volta a ter o nome e o ícone de sempre.")
+                    }
             }
             .controlSize(.small)
         }

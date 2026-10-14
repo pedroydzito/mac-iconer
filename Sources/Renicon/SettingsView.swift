@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var store: LibraryStore
     @EnvironmentObject private var updater: Updater
+    @State private var confirmReset = false
 
     var body: some View {
         Form {
@@ -16,11 +17,20 @@ struct SettingsView: View {
                 LabeledContent("Manutenção") {
                     HStack {
                         Button("Verificar Agora") { store.sync() }
-                        Button("Recriar Todos") { store.applyAll() }
+                        Button("Recriar Todos") { Task { await store.applyAll() } }
                     }
                 }
                 LabeledContent("Dock") {
                     Button("Recarregar Dock") { store.reloadDock() }
+                }
+                LabeledContent("Desfazer tudo") {
+                    Button("Remover Todos os Atalhos…", role: .destructive) { confirmReset = true }
+                        .disabled(store.entries.isEmpty)
+                        .confirmationDialog("Remover todos os atalhos?", isPresented: $confirmReset) {
+                            Button("Remover Tudo", role: .destructive) { store.removeAll() }
+                        } message: {
+                            Text("Apaga todos os atalhos criados pelo Renicon e devolve os ícones originais dos apps. Use antes de desinstalar o Renicon.")
+                        }
                 }
             } header: {
                 Text("Atalhos")

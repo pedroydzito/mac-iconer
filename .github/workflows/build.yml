@@ -10,6 +10,9 @@ on:
       version:
         description: "Versão a publicar (ex.: 1.0.0). Deixe vazio para só compilar."
         required: false
+      notes:
+        description: "Novidades desta versão (aparecem na janela de atualização)"
+        required: false
 
 permissions:
   contents: write
@@ -54,4 +57,5 @@ jobs:
           files: |
             build/Renicon.dmg
             build/Renicon.zip
-          generate_release_notes: true
+          body: ${{ inputs.notes }}
+          generate_release_notes: ${{ inputs.notes == '' }}
