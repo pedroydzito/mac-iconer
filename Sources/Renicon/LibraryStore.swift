@@ -352,6 +352,11 @@ final class LibraryStore: ObservableObject {
             entries[j] = current
             updateAutoReapply()
             try applyToOriginalIfNeeded(current, force: true)
+            if current.applyIconToOriginal, let original = resolvedOriginalURL(for: current)?.path,
+               DockManager.contains(original) {
+                // O original já está no Dock: troca a etiqueta e força o Dock a reler o ícone.
+                if !DockManager.relabel(original, label: current.displayName) { reloadDock() }
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -413,13 +418,24 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    /// O que vai para o Dock: com o ícone aplicado ao original, o próprio app original
+    /// (assim o app aberto usa o mesmo item do Dock, sem aparecer duplicado); senão, o atalho.
+    private func dockTarget(for entry: AppEntry) -> String? {
+        if entry.applyIconToOriginal, entry.hasCustomIcon, let url = resolvedOriginalURL(for: entry) { return url.path }
+        return entry.shortcutPath
+    }
+
     func isInDock(_ entry: AppEntry) -> Bool {
-        entry.shortcutPath.map(DockManager.contains) ?? false
+        guard let target = dockTarget(for: entry), DockManager.contains(target) else { return false }
+        // Se o atalho também está fixado junto do original, ainda há o que arrumar.
+        if target != entry.shortcutPath, let shortcut = entry.shortcutPath, DockManager.contains(shortcut) { return false }
+        return true
     }
 
     func pinToDock(_ id: AppEntry.ID) {
-        guard let entry = entries.first(where: { $0.id == id }), let path = entry.shortcutPath else { return }
-        DockManager.pin(shortcut: path, replacing: resolvedOriginalURL(for: entry)?.path, label: entry.displayName)
+        guard let entry = entries.first(where: { $0.id == id }), let target = dockTarget(for: entry) else { return }
+        let others = [entry.shortcutPath, resolvedOriginalURL(for: entry)?.path].compactMap { $0 }
+        DockManager.pin(target, replacing: others, label: entry.displayName)
         objectWillChange.send()
     }
 

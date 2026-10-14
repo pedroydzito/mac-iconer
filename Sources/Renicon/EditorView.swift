@@ -43,15 +43,19 @@ struct EditorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar {
             ToolbarItem(placement: .navigation) {
+                HStack(spacing: 0) {
+                Spacer().frame(width: 12)
                 Button {
                     nameFocused = false
                     store.selection = nil
                 } label: {
                     Label("Voltar", systemImage: "chevron.left")
                         .labelStyle(.titleAndIcon)
+                        .padding(.horizontal, 10)
                 }
                 .keyboardShortcut(.cancelAction)
                 .help("Voltar ao início (Esc)")
+                }
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -97,7 +101,7 @@ struct EditorView: View {
                                 .padding(.horizontal, 4)
                         }
                         .glassButton()
-                        .help("Fixa o atalho no Dock (no lugar do app original, se ele estiver lá)")
+                        .help("Fixa no Dock com o novo nome e ícone. Ao abrir o app, ele usa este mesmo item do Dock.")
                     }
                 }
 

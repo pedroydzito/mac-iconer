@@ -46,17 +46,34 @@ enum DockManager {
         persistentApps().contains { path(of: $0) == normalize(appPath) }
     }
 
-    /// Fixa o atalho no Dock. Se o app original estiver fixado, o atalho ocupa o lugar dele.
-    static func pin(shortcut: String, replacing original: String?, label: String) {
+    /// Fixa `target` no Dock com a etiqueta `label`. Se algum dos caminhos em `replacing`
+    /// já estiver fixado, o novo item ocupa o lugar dele (e duplicatas são removidas).
+    static func pin(_ target: String, replacing others: [String], label: String) {
         var apps = persistentApps()
-        if apps.contains(where: { path(of: $0) == normalize(shortcut) }) { return }
-        let newTile = tile(for: shortcut, label: label)
-        if let original, let index = apps.firstIndex(where: { path(of: $0) == normalize(original) }) {
+        let paths = Set(([target] + others).map(normalize))
+        let newTile = tile(for: target, label: label)
+        if let index = apps.firstIndex(where: { path(of: $0).map(paths.contains) ?? false }) {
             apps[index] = newTile
+            apps = apps.enumerated().filter { offset, tile in
+                offset == index || !(path(of: tile).map(paths.contains) ?? false)
+            }.map(\.element)
         } else {
             apps.append(newTile)
         }
         save(apps)
+    }
+
+    /// Atualiza a etiqueta de um item já fixado. Retorna se havia algo para mudar.
+    @discardableResult
+    static func relabel(_ appPath: String, label: String) -> Bool {
+        var apps = persistentApps()
+        guard let index = apps.firstIndex(where: { path(of: $0) == normalize(appPath) }),
+              var tileData = apps[index]["tile-data"] as? [String: Any],
+              tileData["file-label"] as? String != label else { return false }
+        tileData["file-label"] = label
+        apps[index]["tile-data"] = tileData
+        save(apps)
+        return true
     }
 
     /// Quando o atalho é renomeado, o item fixado passa a apontar para o novo caminho.
