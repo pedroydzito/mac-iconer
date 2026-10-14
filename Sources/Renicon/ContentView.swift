@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var store: LibraryStore
+    @Environment(\.undoManager) private var undoManager
     @State private var dropTargeted = false
 
     private var selectedEntry: AppEntry? {
@@ -13,17 +14,17 @@ struct ContentView: View {
         ZStack {
             Backdrop(image: selectedEntry.map { store.effectiveIcon(for: $0) })
 
-            VStack(spacing: 0) {
+            Group {
                 if let id = store.selection, let entry = store.binding(for: id) {
                     EditorView(entry: entry)
                         .id(id)
-                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                } else {
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else if store.entries.isEmpty {
                     EmptyDropView(targeted: dropTargeted)
-                }
-                if !store.entries.isEmpty {
-                    AppShelf()
-                        .padding(.bottom, 18)
+                        .transition(.opacity)
+                } else {
+                    HomeView(targeted: dropTargeted)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
             }
             .padding(.top, 28)
@@ -43,7 +44,110 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+        .onAppear { store.undoManager = undoManager }
+        .onChange(of: undoManager) { _, manager in store.undoManager = manager }
         .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Início (todos os apps)
+
+struct HomeView: View {
+    @EnvironmentObject private var store: LibraryStore
+    let targeted: Bool
+    @State private var pendingRemoval: AppEntry?
+
+    private let columns = [GridItem(.adaptive(minimum: 130, maximum: 160), spacing: 18)]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Seus apps")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                    Text("Clique em um app para editar, ou solte outro app aqui para adicionar.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    store.chooseApps()
+                } label: {
+                    Label("Adicionar", systemImage: "plus")
+                }
+                .glassButton(prominent: true)
+                .controlSize(.large)
+                .help("Adicionar app (⌘O)")
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 18) {
+                    ForEach(store.entries) { entry in
+                        card(entry)
+                    }
+                }
+                .padding(.horizontal, 32)
+                .padding(.vertical, 12)
+            }
+        }
+        .overlay {
+            if targeted {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [10, 8]))
+                    .padding(14)
+                    .allowsHitTesting(false)
+            }
+        }
+        .confirmationDialog(
+            "Remover “\(pendingRemoval?.displayName ?? "")”?",
+            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
+        ) {
+            Button("Remover", role: .destructive) {
+                if let id = pendingRemoval?.id { store.remove(id) }
+            }
+        } message: {
+            Text("O atalho é apagado e o app original volta a ter o nome e o ícone de sempre.")
+        }
+    }
+
+    private func card(_ entry: AppEntry) -> some View {
+        Button {
+            store.selection = entry.id
+        } label: {
+            VStack(spacing: 10) {
+                Image(nsImage: store.effectiveIcon(for: entry))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 84, height: 84)
+                    .shadow(color: .black.opacity(0.35), radius: 10, y: 6)
+                VStack(spacing: 2) {
+                    Text(entry.displayName)
+                        .font(.callout.weight(.semibold))
+                        .lineLimit(1)
+                    Text(entry.hasPendingChanges ? "Não aplicado" : "Aplicado")
+                        .font(.caption)
+                        .foregroundStyle(entry.hasPendingChanges ? Color.accentColor : .secondary)
+                }
+            }
+            .padding(.vertical, 16)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity)
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .glass(in: RoundedRectangle(cornerRadius: 22, style: .continuous), interactive: true)
+        .contextMenu {
+            Button("Editar") { store.selection = entry.id }
+            Button("Aplicar") { Task { await store.apply(entry.id) } }
+            Button("Mostrar Original no Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([entry.originalURL])
+            }
+            Divider()
+            Button("Remover do Renicon…", role: .destructive) { pendingRemoval = entry }
+        }
     }
 }
 
@@ -94,85 +198,3 @@ struct EmptyDropView: View {
     }
 }
 
-// MARK: - Prateleira de apps (estilo Dock)
-
-struct AppShelf: View {
-    @EnvironmentObject private var store: LibraryStore
-    @State private var hovered: AppEntry.ID?
-    @State private var pendingRemoval: AppEntry?
-
-    var body: some View {
-        GlassGroup(spacing: 10) {
-            HStack(spacing: 10) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(store.entries) { entry in
-                            shelfItem(entry)
-                        }
-                    }
-                    .padding(8)
-                }
-                .frame(width: min(CGFloat(store.entries.count) * 60 + 10, 520))
-                .glass(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-
-                Button {
-                    store.chooseApps()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glass(in: Circle(), interactive: true)
-                .help("Adicionar app (⌘O)")
-            }
-        }
-    }
-
-    private func shelfItem(_ entry: AppEntry) -> some View {
-        let selected = store.selection == entry.id
-        return Button {
-            store.selection = entry.id
-        } label: {
-            ZStack(alignment: .topTrailing) {
-                Image(nsImage: store.effectiveIcon(for: entry))
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 44, height: 44)
-                    .scaleEffect(hovered == entry.id ? 1.12 : 1)
-                if entry.hasPendingChanges {
-                    Circle().fill(Color.accentColor)
-                        .frame(width: 9, height: 9)
-                        .overlay(Circle().stroke(.black.opacity(0.4), lineWidth: 1))
-                        .offset(x: 2, y: -2)
-                }
-            }
-            .padding(5)
-            .background(selected ? Color.white.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovered = $0 ? entry.id : (hovered == entry.id ? nil : hovered) }
-        .animation(.spring(duration: 0.2), value: hovered)
-        .help(entry.displayName)
-        .contextMenu {
-            Button("Aplicar") { Task { await store.apply(entry.id) } }
-            Button("Mostrar Original no Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([entry.originalURL])
-            }
-            Divider()
-            Button("Remover do Renicon…", role: .destructive) { pendingRemoval = entry }
-        }
-        .confirmationDialog(
-            "Remover “\(pendingRemoval?.displayName ?? "")”?",
-            isPresented: Binding(get: { pendingRemoval?.id == entry.id }, set: { if !$0 { pendingRemoval = nil } })
-        ) {
-            Button("Remover", role: .destructive) {
-                if let id = pendingRemoval?.id { store.remove(id) }
-            }
-        } message: {
-            Text("O atalho é apagado e o app original volta a ter o nome e o ícone de sempre.")
-        }
-    }
-}

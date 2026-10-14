@@ -4,9 +4,17 @@ import AppKit
 /// abre o app original. Como ele aponta para o *bundle identifier* (e não para o
 /// arquivo), o app original pode ser atualizado ou movido sem quebrar nada.
 enum ShortcutBuilder {
+    /// ~/Applications: pasta que o Spotlight e o Launchpad sempre indexam.
     static var folder: URL {
         FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Applications/Renicon", isDirectory: true)
+            .appendingPathComponent("Applications", isDirectory: true)
+    }
+
+    /// Pasta usada até a versão 1.2 (os atalhos são migrados automaticamente).
+    static var legacyFolder: URL { folder.appendingPathComponent("Renicon", isDirectory: true) }
+
+    static func isOurShortcut(_ url: URL) -> Bool {
+        (Bundle(url: url)?.bundleIdentifier ?? "").hasPrefix("com.renicon.shortcut.")
     }
 
     private static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
@@ -28,7 +36,14 @@ enum ShortcutBuilder {
             try fm.removeItem(atPath: old)
             renamedFrom = old
         }
-        if fm.fileExists(atPath: app.path) { try fm.removeItem(at: app) }
+        if fm.fileExists(atPath: app.path) {
+            // Nunca apaga um app de verdade que tenha o mesmo nome.
+            guard isOurShortcut(app) else {
+                throw NSError(domain: "Renicon", code: 5, userInfo: [NSLocalizedDescriptionKey:
+                    "Já existe um app chamado “\(entry.displayName)” em \(folder.path). Escolha outro nome."])
+            }
+            try fm.removeItem(at: app)
+        }
 
         let contents = app.appendingPathComponent("Contents")
         let macOS = contents.appendingPathComponent("MacOS")
@@ -67,8 +82,9 @@ enum ShortcutBuilder {
 
         // Assinatura ad-hoc, registro no LaunchServices e indexação no Spotlight.
         try? Shell.run("/usr/bin/codesign", ["--force", "--deep", "-s", "-", app.path])
-        try? Shell.run(lsregister, ["-f", app.path])
-        try? Shell.run("/usr/bin/mdimport", [app.path])
+        _ = try? Shell.run(lsregister, ["-f", "-R", "-trusted", app.path])
+        _ = try? Shell.run("/usr/bin/mdimport", ["-i", app.path])
+        _ = try? Shell.run("/usr/bin/touch", [app.path])
         NSWorkspace.shared.noteFileSystemChanged(app.path)
         if let renamedFrom {
             DockManager.replace(path: renamedFrom, with: app.path, label: entry.displayName)

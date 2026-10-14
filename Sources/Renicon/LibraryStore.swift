@@ -8,6 +8,8 @@ final class LibraryStore: ObservableObject {
     @Published var selection: AppEntry.ID?
     @Published var errorMessage: String?
     @Published var busy = false
+    /// Desfazer/refazer (⌘Z / ⇧⌘Z) da janela principal.
+    var undoManager: UndoManager?
 
     private let fm = FileManager.default
     private let supportURL: URL
@@ -120,6 +122,48 @@ final class LibraryStore: ObservableObject {
         return originalIcon(for: entry)
     }
 
+    // MARK: - Desfazer
+
+    /// Troca o estado editável de um app registrando o desfazer (nome, formato, ajustes e ícone).
+    func update(_ id: AppEntry.ID, actionName: String, _ change: (inout AppEntry) -> Void) {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
+        let before = entries[i]
+        let iconBefore = before.hasCustomIcon ? (try? Data(contentsOf: customIconURL(for: before))) : nil
+        var after = before
+        change(&after)
+        guard after != before else { return }
+        after.hasPendingChanges = true
+        entries[i] = after
+        registerUndo(id: id, restoring: before, iconData: iconBefore, actionName: actionName)
+    }
+
+    /// Registra um desfazer que volta o app para `snapshot` (inclusive a imagem do ícone).
+    func registerUndo(id: AppEntry.ID, restoring snapshot: AppEntry, iconData: Data?, actionName: String) {
+        guard let undoManager else { return }
+        undoManager.registerUndo(withTarget: self) { store in
+            MainActor.assumeIsolated { store.performUndo(id: id, restoring: snapshot, iconData: iconData, actionName: actionName) }
+        }
+        undoManager.setActionName(actionName)
+    }
+
+    private func performUndo(id: AppEntry.ID, restoring snapshot: AppEntry, iconData: Data?, actionName: String) {
+        let store = self
+        do {
+            guard let i = store.entries.firstIndex(where: { $0.id == id }) else { return }
+            let current = store.entries[i]
+            let currentIcon = current.hasCustomIcon ? (try? Data(contentsOf: store.customIconURL(for: current))) : nil
+            if let iconData { try? iconData.write(to: store.customIconURL(for: snapshot), options: .atomic) }
+            store.clearStyledCache(for: id)
+            var restored = snapshot
+            restored.shortcutPath = current.shortcutPath
+            restored.lastApplied = current.lastApplied
+            restored.hasPendingChanges = true
+            store.entries[i] = restored
+            // Registra o inverso para o ⇧⌘Z (refazer).
+            store.registerUndo(id: id, restoring: current, iconData: currentIcon, actionName: actionName)
+        }
+    }
+
     // MARK: - Edição
 
     func add(urls: [URL]) {
@@ -158,10 +202,17 @@ final class LibraryStore: ObservableObject {
             return
         }
         do {
+            let before = entries[i]
+            let iconBefore = before.hasCustomIcon ? (try? Data(contentsOf: customIconURL(for: before))) : nil
             try data.write(to: customIconURL(for: entries[i]), options: .atomic)
             clearStyledCache(for: id)
+            if !entries[i].hasCustomIcon {
+                // Primeiro ícone escolhido: usa também no app original, para o Dock e o ⌘Tab.
+                entries[i].applyIconToOriginal = true
+            }
             entries[i].hasCustomIcon = true
             entries[i].hasPendingChanges = true
+            registerUndo(id: id, restoring: before, iconData: iconBefore, actionName: "Trocar Ícone")
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -232,13 +283,16 @@ final class LibraryStore: ObservableObject {
 
     func resetIcon(for id: AppEntry.ID) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
-        try? fm.removeItem(at: customIconURL(for: entries[i]))
+        let before = entries[i]
+        let iconBefore = try? Data(contentsOf: customIconURL(for: before))
+        registerUndo(id: id, restoring: before, iconData: iconBefore, actionName: "Restaurar Ícone")
+        // O arquivo é mantido até o app ser removido, para o desfazer funcionar.
         clearStyledCache(for: id)
         entries[i].hasCustomIcon = false
         entries[i].hasPendingChanges = true
     }
 
-    private func clearStyledCache(for id: UUID) {
+    func clearStyledCache(for id: UUID) {
         styledIconCache = styledIconCache.filter { !$0.key.hasPrefix(id.uuidString) }
     }
 
@@ -391,7 +445,10 @@ final class LibraryStore: ObservableObject {
                 entry.originalPath = current.path
                 needsRebuild = true
             }
-            if let path = entry.shortcutPath, !fm.fileExists(atPath: path) { needsRebuild = true }
+            if let path = entry.shortcutPath,
+               !fm.fileExists(atPath: path) || path.hasPrefix(ShortcutBuilder.legacyFolder.path + "/") {
+                needsRebuild = true
+            }
             if needsRebuild, let url = try? ShortcutBuilder.build(for: entry, icon: effectiveIcon(for: entry)) {
                 entry.shortcutPath = url.path
             }
@@ -399,5 +456,10 @@ final class LibraryStore: ObservableObject {
             if entry != entries[i] { entries[i] = entry }
         }
         updateAutoReapply()
+        // Remove a pasta antiga (~/Applications/Renicon) quando ficar vazia.
+        let legacy = ShortcutBuilder.legacyFolder.path
+        if (try? fm.contentsOfDirectory(atPath: legacy).filter { $0 != ".DS_Store" }.isEmpty) == true {
+            try? fm.removeItem(atPath: legacy)
+        }
     }
 }

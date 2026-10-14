@@ -26,7 +26,7 @@ O GitHub Actions compila o app, gera `Renicon.dmg` e `Renicon.zip` e publica a R
 
 ## Como funciona
 
-Para cada app, o Renicon cria um **app atalho** em `~/Applications/Renicon/`:
+Para cada app, o Renicon cria um **app atalho** em `~/Applications/` (a pasta de apps do seu usuário, que o Spotlight e o Launchpad sempre indexam):
 
 - é um pacote `.app` leve, com o nome e o ícone que você escolheu;
 - ao ser aberto, ele apenas abre o app original pelo *bundle identifier* (ex.: `com.adobe.Photoshop`);
@@ -54,7 +54,9 @@ Ou seja: abra o Renicon, ajuste, clique em **Aplicar** e feche. Se o Dock demora
 ## Recursos
 
 - Visual escuro com **Liquid Glass** (macOS 26; nas versões 14/15 usa vidro translúcido)
-- Tela única: solte o app → clique no ícone para trocar → digite o nome → **Aplicar**
+- Tela inicial com todos os seus apps; clique em um para editar e use **‹ Apps** (ou Esc) para voltar
+- Editor: clique no ícone para trocar → digite o nome → **Aplicar**
+- **⌘Z / ⇧⌘Z** para desfazer e refazer nome, ícone, formato e ajustes
 - Ícone: clique, arraste uma imagem (inclusive direto do navegador) ou cole (⋯ › Colar Imagem)
 - A imagem é **copiada** para o Renicon: apagar o arquivo original não afeta nada; remover o app do Renicon apaga a cópia
 - Botão **Pôr no Dock**: fixa o atalho no Dock, no lugar do app original se ele estiver lá; ao renomear, o item do Dock acompanha

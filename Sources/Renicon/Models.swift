@@ -39,7 +39,7 @@ struct AppEntry: Identifiable, Codable, Hashable {
     var adjustments = IconAdjustments()
     /// Também aplica o ícone ao app original (aparece no Dock enquanto o app está aberto).
     var applyIconToOriginal = false
-    /// Caminho do atalho gerado em ~/Applications/Renicon.
+    /// Caminho do atalho gerado em ~/Applications.
     var shortcutPath: String?
     var lastApplied: Date?
     /// Há edições que ainda não foram aplicadas ao atalho.

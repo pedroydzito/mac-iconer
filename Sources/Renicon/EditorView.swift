@@ -11,6 +11,21 @@ struct EditorView: View {
     var body: some View {
         VStack(spacing: 26) {
             HStack {
+                Button {
+                    nameFocused = false
+                    store.selection = nil
+                } label: {
+                    Label("Apps", systemImage: "chevron.left")
+                        .font(.callout.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .frame(height: 32)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .glass(in: Capsule(), interactive: true)
+                .keyboardShortcut("[", modifiers: .command)
+                .help("Voltar para todos os apps (Esc)")
+
                 Spacer()
                 Button {
                     showInfo.toggle()
@@ -47,6 +62,9 @@ struct EditorView: View {
         }
         .padding(.bottom, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onExitCommand {
+            if nameFocused { nameFocused = false } else { store.selection = nil }
+        }
         .onAppear {
             // Recém-adicionado: já coloca o cursor no nome.
             if entry.lastApplied == nil { nameFocused = true }
@@ -187,9 +205,12 @@ private struct IconDropZone: View {
 // MARK: - Nome
 
 private struct NameField: View {
+    @EnvironmentObject private var store: LibraryStore
     @Binding var entry: AppEntry
     var focused: FocusState<Bool>.Binding
     var onSubmit: () -> Void
+    /// Estado do app quando a edição do nome começou (para o ⌘Z voltar ao nome anterior).
+    @State private var editStart: AppEntry?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -204,7 +225,7 @@ private struct NameField: View {
                 .onSubmit(onSubmit)
             if entry.customName != entry.originalName {
                 Button {
-                    entry.customName = entry.originalName
+                    store.update(entry.id, actionName: "Restaurar Nome") { $0.customName = $0.originalName }
                 } label: {
                     Image(systemName: "arrow.uturn.backward.circle.fill")
                         .foregroundStyle(.secondary)
@@ -221,6 +242,14 @@ private struct NameField: View {
             Capsule().stroke(Color.accentColor.opacity(focused.wrappedValue ? 0.8 : 0), lineWidth: 2)
         )
         .animation(.easeOut(duration: 0.15), value: focused.wrappedValue)
+        .onChange(of: focused.wrappedValue) { _, isFocused in
+            if isFocused {
+                editStart = entry
+            } else if let start = editStart, start.customName != entry.customName {
+                store.registerUndo(id: entry.id, restoring: start, iconData: nil, actionName: "Renomear")
+                editStart = nil
+            }
+        }
         .help("Clique para digitar o nome que vai aparecer no Spotlight, Launchpad e Dock")
     }
 }
@@ -237,7 +266,7 @@ private struct InfoPanel: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Formato do ícone").font(.headline)
-                Picker("Formato do ícone", selection: $entry.iconStyle) {
+                Picker("Formato do ícone", selection: undoable(\.iconStyle, "Formato do Ícone")) {
                     ForEach(IconStyle.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -249,7 +278,7 @@ private struct InfoPanel: View {
                 if entry.hasCustomIcon && entry.iconStyle == .macOS {
                     HStack(spacing: 10) {
                         Image(systemName: "minus.magnifyingglass").foregroundStyle(.secondary)
-                        Slider(value: $entry.adjustments.zoom, in: 0.5...1.6)
+                        Slider(value: undoable(\.adjustments.zoom, "Zoom do Ícone"), in: 0.5...1.6)
                         Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
                         Text("\(Int(entry.adjustments.zoom * 100))%")
                             .monospacedDigit().font(.caption).frame(width: 38, alignment: .trailing)
@@ -257,10 +286,14 @@ private struct InfoPanel: View {
                     HStack {
                         ColorPicker("Cor de fundo", selection: Binding(
                             get: { Color(nsColor: entry.adjustments.backgroundColor) },
-                            set: { entry.adjustments.background = NSColor($0).hexString }
+                            set: { color in
+                                store.update(entry.id, actionName: "Cor de Fundo") { $0.adjustments.background = NSColor(color).hexString }
+                            }
                         ), supportsOpacity: false)
                         Spacer()
-                        Button("Redefinir") { entry.adjustments = IconAdjustments() }
+                        Button("Redefinir") {
+                            store.update(entry.id, actionName: "Redefinir Ajustes") { $0.adjustments = IconAdjustments() }
+                        }
                             .controlSize(.small)
                             .disabled(entry.adjustments == IconAdjustments())
                     }
@@ -319,6 +352,13 @@ private struct InfoPanel: View {
         }
         .padding(18)
         .frame(width: 380)
+    }
+
+    private func undoable<T: Equatable>(_ keyPath: WritableKeyPath<AppEntry, T>, _ actionName: String) -> Binding<T> {
+        Binding(
+            get: { entry[keyPath: keyPath] },
+            set: { value in store.update(entry.id, actionName: actionName) { $0[keyPath: keyPath] = value } }
+        )
     }
 
     private func row(_ label: String, _ value: String) -> some View {
