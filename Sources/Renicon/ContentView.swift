@@ -56,6 +56,7 @@ struct ContentView: View {
                     } label: {
                         Label("Detalhes", systemImage: "info.circle")
                     }
+                    .accessibilityLabel("Detalhes e opções")
                     .help("Detalhes e opções")
                     .popover(isPresented: $showInfo, arrowEdge: .bottom) {
                         InfoPanel(entry: entry) { showInfo = false }
@@ -76,13 +77,45 @@ struct ContentView: View {
             store.add(urls: apps)
             return !apps.isEmpty
         } isTargeted: { dropTargeted = $0 }
-        .alert("Algo deu errado", isPresented: Binding(
-            get: { store.errorMessage != nil },
-            set: { if !$0 { store.errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(store.errorMessage ?? "")
+        // Erros e confirmações em avisos discretos, sem janelas que travam a tela.
+        .overlay(alignment: .top) {
+            if let message = store.errorMessage {
+                Banner(text: message, systemImage: "exclamationmark.triangle.fill", tint: .orange) {
+                    store.errorMessage = nil
+                }
+                .padding(.top, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .task(id: message) {
+                    try? await Task.sleep(nanoseconds: 7_000_000_000)
+                    if store.errorMessage == message { store.errorMessage = nil }
+                }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = store.toast {
+                Label(toast, systemImage: "checkmark.circle.fill")
+                    .font(.callout.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .glass(in: Capsule())
+                    .padding(.bottom, store.entries.isEmpty ? 24 : 100)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.spring(duration: 0.35), value: store.errorMessage)
+        .animation(.spring(duration: 0.35), value: store.toast)
+        .background {
+            // Atalhos: ⌥⌘← / ⌥⌘→ trocam de app.
+            Group {
+                Button("") { store.selectAdjacent(-1) }.keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                Button("") { store.selectAdjacent(1) }.keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            store.refreshAfterActivation()
         }
         .onAppear { store.undoManager = undoManager }
         .onChange(of: undoManager) { _, manager in store.undoManager = manager }
@@ -122,7 +155,7 @@ struct EmptyDropView: View {
             VStack(spacing: 8) {
                 Text("Solte um app aqui")
                     .font(.system(size: 26, weight: .semibold, design: .rounded))
-                Text("Arraste qualquer app da pasta Aplicativos para mudar o nome e o ícone dele.\nO app original continua atualizando normalmente.")
+                Text("Arraste um ou vários apps da pasta Aplicativos para mudar o nome e o ícone.\nO app original continua atualizando normalmente.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -153,13 +186,19 @@ struct AppShelf: View {
     var body: some View {
         GlassGroup(spacing: 10) {
             HStack(spacing: 10) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(store.entries) { entry in
-                            shelfItem(entry)
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(store.entries) { entry in
+                                shelfItem(entry).id(entry.id)
+                            }
                         }
+                        .padding(8)
                     }
-                    .padding(8)
+                    .onChange(of: store.selection) { _, id in
+                        guard let id else { return }
+                        withAnimation(.spring(duration: 0.35)) { proxy.scrollTo(id, anchor: .center) }
+                    }
                 }
                 .frame(width: min(CGFloat(store.entries.count) * 60 + 10, 520))
                 .glass(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -175,6 +214,7 @@ struct AppShelf: View {
                 .buttonStyle(.plain)
                 .glass(in: Circle(), interactive: true)
                 .help("Adicionar app (⌘O)")
+                .accessibilityLabel("Adicionar app")
             }
         }
     }
@@ -205,6 +245,8 @@ struct AppShelf: View {
         .onHover { hovered = $0 ? entry.id : (hovered == entry.id ? nil : hovered) }
         .animation(.spring(duration: 0.2), value: hovered)
         .help(entry.displayName)
+        .accessibilityLabel(entry.displayName)
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .contextMenu {
             Button("Aplicar") { Task { await store.apply(entry.id) } }
             Button("Mostrar Original no Finder") {
@@ -224,4 +266,36 @@ struct AppShelf: View {
             Text("O atalho é apagado e o app original volta a ter o nome e o ícone de sempre.")
         }
     }
+}
+
+// MARK: - Aviso
+
+struct Banner: View {
+    let text: String
+    let systemImage: String
+    let tint: Color
+    var onClose: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage).foregroundStyle(tint)
+            Text(text)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Button(action: onClose) {
+                Image(systemName: "xmark").font(.caption.weight(.bold))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Fechar aviso")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: 520)
+        .glass(in: RoundedRectangle(cornerRadius: 16, style: .continuous), tint: tint.opacity(0.25))
+    }
+}
+
+extension Notification.Name {
+    static let reniconCancelEditing = Notification.Name("reniconCancelEditing")
 }

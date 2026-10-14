@@ -7,6 +7,9 @@ final class LibraryStore: ObservableObject {
     @Published var entries: [AppEntry] = [] { didSet { save() } }
     @Published var selection: AppEntry.ID?
     @Published var errorMessage: String?
+    /// Aviso curto e discreto (ex.: "Aplicado").
+    @Published var toast: String?
+    @Published var loadingSuggestions: Set<AppEntry.ID> = []
     @Published var busy = false
     /// Desfazer/refazer (⌘Z / ⇧⌘Z) da janela principal.
     var undoManager: UndoManager?
@@ -143,6 +146,34 @@ final class LibraryStore: ObservableObject {
         return originalIcon(for: entry)
     }
 
+    func showToast(_ message: String) {
+        toast = message
+        NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+        let current = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
+            if self?.toast == current { self?.toast = nil }
+        }
+    }
+
+    /// Outro app da lista com o mesmo nome (o atalho de um sobrescreveria o do outro).
+    func duplicate(of entry: AppEntry) -> AppEntry? {
+        let name = ShortcutBuilder.sanitize(entry.displayName).lowercased()
+        return entries.first { $0.id != entry.id && ShortcutBuilder.sanitize($0.displayName).lowercased() == name }
+    }
+
+    /// Seleciona o app anterior/seguinte da faixa.
+    func selectAdjacent(_ step: Int) {
+        guard !entries.isEmpty else { return }
+        let index = selection.flatMap { id in entries.firstIndex { $0.id == id } } ?? (step > 0 ? -1 : entries.count)
+        selection = entries[(index + step + entries.count) % entries.count].id
+    }
+
+    /// Ao voltar para o Renicon: relê os ícones originais (um app pode ter sido atualizado).
+    func refreshAfterActivation() {
+        originalIconCache.removeAll()
+        objectWillChange.send()
+    }
+
     // MARK: - Desfazer
 
     /// Troca o estado editável de um app registrando o desfazer (nome, formato, ajustes e ícone).
@@ -194,6 +225,7 @@ final class LibraryStore: ObservableObject {
             let bundleID = bundle?.bundleIdentifier
             if let existing = entries.first(where: { ($0.bundleIdentifier != nil && $0.bundleIdentifier == bundleID) || $0.originalPath == url.path }) {
                 lastID = existing.id
+                showToast("“\(existing.displayName)” já estava na lista")
                 continue
             }
             if bundleID?.hasPrefix("com.renicon.") == true { continue }
@@ -329,8 +361,7 @@ final class LibraryStore: ObservableObject {
     func apply(_ id: AppEntry.ID) async -> Bool {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return false }
         var entry = entries[i]
-        let name = ShortcutBuilder.sanitize(entry.displayName).lowercased()
-        if let other = entries.first(where: { $0.id != id && ShortcutBuilder.sanitize($0.displayName).lowercased() == name }) {
+        if let other = duplicate(of: entry) {
             errorMessage = "Já existe um app chamado “\(other.displayName)” no Renicon. Escolha outro nome."
             return false
         }
@@ -375,6 +406,7 @@ final class LibraryStore: ObservableObject {
                 let changed = await Task.detached { DockManager.relabel(original, label: label) }.value
                 if !changed { reloadDock() }
             }
+            showToast("“\(current.displayName)” aplicado")
             if firstApply && originalWasInDock {
                 // O app já estava no Dock: troca pelo ajustado sem precisar clicar em nada.
                 busy = false
@@ -394,6 +426,8 @@ final class LibraryStore: ObservableObject {
     func loadSuggestions(for id: AppEntry.ID) async {
         guard suggestions[id] == nil, let entry = entries.first(where: { $0.id == id }) else { return }
         suggestions[id] = []
+        loadingSuggestions.insert(id)
+        defer { loadingSuggestions.remove(id) }
         suggestions[id] = await IconSuggestions.search(for: entry)
     }
 

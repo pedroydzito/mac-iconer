@@ -18,6 +18,13 @@ struct EditorView: View {
 
             NameField(entry: $entry, focused: $nameFocused) { applyNow() }
 
+            if let other = store.duplicate(of: entry) {
+                Label("“\(other.displayName)” já usa esse nome. Escolha outro.", systemImage: "exclamationmark.circle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .transition(.opacity)
+            }
+
             VStack(alignment: .leading, spacing: 10) {
             Toggle(isOn: Binding(
                 get: { entry.renameOriginal },
@@ -69,7 +76,13 @@ struct EditorView: View {
         .onAppear {
             inDock = store.isInDock(entry)
             // Recém-adicionado: já coloca o cursor no nome.
-            if entry.lastApplied == nil { nameFocused = true }
+            if entry.lastApplied == nil {
+                nameFocused = true
+                // Seleciona o nome todo: é só digitar por cima.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                }
+            }
         }
     }
 
@@ -126,7 +139,7 @@ struct EditorView: View {
 
     private func scheduleAutoApply() {
         autoApply?.cancel()
-        guard entry.hasPendingChanges, !nameFocused, !store.busy else { return }
+        guard entry.hasPendingChanges, !nameFocused, !store.busy, store.duplicate(of: entry) == nil else { return }
         autoApply = Task {
             try? await Task.sleep(nanoseconds: 900_000_000)
             guard !Task.isCancelled, entry.hasPendingChanges, !nameFocused, !store.busy else { return }
@@ -229,7 +242,13 @@ private struct SuggestionsRow: View {
     var body: some View {
         let items = store.suggestions[entry.id] ?? []
         Group {
-            if !items.isEmpty {
+            if items.isEmpty && store.loadingSuggestions.contains(entry.id) {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Buscando sugestões…").font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(height: 40)
+            } else if !items.isEmpty {
                 VStack(spacing: 8) {
                     Text("Sugestões da App Store")
                         .font(.caption.weight(.semibold))
@@ -254,6 +273,7 @@ private struct SuggestionsRow: View {
                                 .buttonStyle(.plain)
                                 .onHover { hovered = $0 ? item.id : (hovered == item.id ? nil : hovered) }
                                 .help(item.name)
+                                .accessibilityLabel("Usar o ícone de \(item.name)")
                             }
                         }
                         .padding(.horizontal, 12)
@@ -300,6 +320,7 @@ private struct NameField: View {
                 }
                 .buttonStyle(.plain)
                 .help("Voltar para “\(entry.originalName)”")
+                .accessibilityLabel("Voltar ao nome original")
             }
         }
         .padding(.horizontal, 20)
@@ -310,6 +331,12 @@ private struct NameField: View {
             Capsule().stroke(Color.accentColor.opacity(focused.wrappedValue ? 0.8 : 0), lineWidth: 2)
         )
         .animation(.easeOut(duration: 0.15), value: focused.wrappedValue)
+        .onReceive(NotificationCenter.default.publisher(for: .reniconCancelEditing)) { _ in
+            // Esc: desfaz o que foi digitado e sai do campo.
+            if let start = editStart { entry.customName = start.customName }
+            editStart = nil
+            focused.wrappedValue = false
+        }
         .onChange(of: focused.wrappedValue) { _, isFocused in
             if isFocused {
                 editStart = entry

@@ -56,7 +56,12 @@ struct SettingsView: View {
             }
 
             Section {
-                LabeledContent("Versão", value: Updater.currentVersion)
+                LabeledContent("Versão") {
+                    HStack {
+                        Text(Updater.currentVersion)
+                        Link("Ver novidades", destination: URL(string: "https://github.com/\(Updater.repository)/releases")!)
+                    }
+                }
                 Toggle("Procurar atualizações automaticamente", isOn: $updater.autoCheck)
                 LabeledContent {
                     HStack {

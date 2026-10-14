@@ -32,6 +32,13 @@ struct RenIconApp: App {
                 Button("Aplicar Tudo") { Task { await store.applyAll() } }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .pasteboard) {
+                Button("Colar como Ícone") {
+                    if let id = store.selection { store.pasteIcon(for: id) }
+                }
+                .keyboardShortcut("v", modifiers: [.command, .shift])
+                .disabled(store.selection == nil)
+            }
         }
 
         Settings {
