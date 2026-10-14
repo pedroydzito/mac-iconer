@@ -37,19 +37,16 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 if store.selection != nil {
-                    HStack(spacing: 0) {
-                        Spacer().frame(width: 12)
-                        Button {
+                    Button {
                             NSApp.keyWindow?.makeFirstResponder(nil)
                             store.selection = nil
                         } label: {
                             Label("Voltar", systemImage: "chevron.left")
                                 .labelStyle(.titleAndIcon)
-                                .padding(.horizontal, 10)
+                                .padding(.horizontal, 6)
                         }
                         .keyboardShortcut(.cancelAction)
                         .help("Voltar ao início (Esc)")
-                    }
                 }
             }
             ToolbarItem(placement: .primaryAction) {
