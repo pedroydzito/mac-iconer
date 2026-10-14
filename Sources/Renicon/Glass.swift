@@ -51,13 +51,39 @@ struct GlassGroup<Content: View>: View {
     }
 }
 
+/// Leve "salto" ao passar o mouse, como os controles do macOS.
+struct HoverLift: ViewModifier {
+    var scale: CGFloat = 1.04
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(hovering ? scale : 1)
+            .brightness(hovering ? 0.06 : 0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.7), value: hovering)
+            .onHover { hovering = $0 }
+    }
+}
+
+extension View {
+    func hoverLift(scale: CGFloat = 1.04) -> some View { modifier(HoverLift(scale: scale)) }
+}
+
 /// Fundo escuro com as cores do ícone selecionado desfocadas, no estilo do macOS.
+/// Sem ícone (tela inicial), usa um degradê roxo-escuro no mesmo tom.
 struct Backdrop: View {
     let image: NSImage?
 
     var body: some View {
         ZStack {
-            Color(red: 0.06, green: 0.06, blue: 0.08)
+            LinearGradient(
+                colors: [Color(red: 0.16, green: 0.07, blue: 0.36), Color(red: 0.05, green: 0.03, blue: 0.14)],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            RadialGradient(
+                colors: [Color(red: 0.42, green: 0.24, blue: 0.85).opacity(0.35), .clear],
+                center: .center, startRadius: 10, endRadius: 520
+            )
             if let image {
                 Image(nsImage: image)
                     .resizable()

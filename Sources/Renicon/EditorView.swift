@@ -4,7 +4,6 @@ import UniformTypeIdentifiers
 struct EditorView: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var entry: AppEntry
-    @State private var showInfo = false
     @State private var inDock = true
     @FocusState private var nameFocused: Bool
 
@@ -41,37 +40,6 @@ struct EditorView: View {
         }
         .padding(.bottom, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                HStack(spacing: 0) {
-                Spacer().frame(width: 12)
-                Button {
-                    nameFocused = false
-                    store.selection = nil
-                } label: {
-                    Label("Voltar", systemImage: "chevron.left")
-                        .labelStyle(.titleAndIcon)
-                        .padding(.horizontal, 10)
-                }
-                .keyboardShortcut(.cancelAction)
-                .help("Voltar ao início (Esc)")
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showInfo.toggle()
-                } label: {
-                    Label("Detalhes", systemImage: "info.circle")
-                }
-                .help("Detalhes e opções")
-                .popover(isPresented: $showInfo, arrowEdge: .bottom) {
-                    InfoPanel(entry: $entry) { showInfo = false }
-                }
-            }
-        }
-        .onExitCommand {
-            if nameFocused { nameFocused = false } else { store.selection = nil }
-        }
         .onChange(of: entry.shortcutPath) { _, _ in inDock = store.isInDock(entry) }
         .onChange(of: entry.applyIconToOriginal) { _, _ in inDock = store.isInDock(entry) }
         // Reconfere quando o usuário volta ao Renicon (pode ter mexido no Dock).
@@ -96,6 +64,7 @@ struct EditorView: View {
                             .padding(.horizontal, 4)
                     }
                     .glassButton()
+                    .hoverLift()
 
                     Button {
                         store.pinToDock(entry.id)
@@ -106,6 +75,7 @@ struct EditorView: View {
                             .padding(.horizontal, 4)
                     }
                     .glassButton()
+                    .hoverLift()
                     .help(inDock ? "Já está no Dock. Clique para atualizar nome e ícone lá."
                                  : "Fixa no Dock com o novo nome e ícone. Ao abrir o app, ele usa este mesmo item do Dock.")
                 }
@@ -123,6 +93,7 @@ struct EditorView: View {
                     .frame(minWidth: 120)
                 }
                 .glassButton(prominent: entry.hasPendingChanges)
+                .hoverLift()
                 .keyboardShortcut("s")
                 .disabled(store.busy || !entry.hasPendingChanges)
                 .help("Cria o atalho com o novo nome e ícone (⌘S)")
@@ -253,6 +224,7 @@ private struct NameField: View {
         .padding(.vertical, 12)
         .frame(width: 400)
         .glass(in: Capsule(), interactive: true)
+        .hoverLift(scale: 1.015)
         .overlay(
             Capsule().stroke(Color.accentColor.opacity(focused.wrappedValue ? 0.8 : 0), lineWidth: 2)
         )
@@ -271,7 +243,7 @@ private struct NameField: View {
 
 // MARK: - Painel de informações (botão “i”)
 
-private struct InfoPanel: View {
+struct InfoPanel: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var entry: AppEntry
     var dismiss: () -> Void

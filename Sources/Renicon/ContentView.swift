@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject private var store: LibraryStore
     @Environment(\.undoManager) private var undoManager
     @State private var dropTargeted = false
+    @State private var showInfo = false
 
     private var selectedEntry: AppEntry? {
         store.selection.flatMap { id in store.entries.first { $0.id == id } }
@@ -32,6 +33,46 @@ struct ContentView: View {
         }
         .navigationTitle("")
         .toolbarBackground(.hidden, for: .windowToolbar)
+        // A barra existe nas duas telas para os botões da janela não mudarem de lugar.
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                if store.selection != nil {
+                    HStack(spacing: 0) {
+                        Spacer().frame(width: 12)
+                        Button {
+                            NSApp.keyWindow?.makeFirstResponder(nil)
+                            store.selection = nil
+                        } label: {
+                            Label("Voltar", systemImage: "chevron.left")
+                                .labelStyle(.titleAndIcon)
+                                .padding(.horizontal, 10)
+                        }
+                        .keyboardShortcut(.cancelAction)
+                        .help("Voltar ao início (Esc)")
+                    }
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                if let id = store.selection, let entry = store.binding(for: id) {
+                    Button {
+                        showInfo.toggle()
+                    } label: {
+                        Label("Detalhes", systemImage: "info.circle")
+                    }
+                    .help("Detalhes e opções")
+                    .popover(isPresented: $showInfo, arrowEdge: .bottom) {
+                        InfoPanel(entry: entry) { showInfo = false }
+                    }
+                } else {
+                    Button {
+                        store.chooseApps()
+                    } label: {
+                        Label("Adicionar App", systemImage: "plus")
+                    }
+                    .help("Adicionar app (⌘O)")
+                }
+            }
+        }
         .frame(minWidth: 640, minHeight: 600)
         .dropDestination(for: URL.self) { urls, _ in
             let apps = urls.filter { $0.pathExtension.lowercased() == "app" }
@@ -57,6 +98,7 @@ struct ContentView: View {
 struct EmptyDropView: View {
     @EnvironmentObject private var store: LibraryStore
     let targeted: Bool
+    @State private var hovering = false
 
     var body: some View {
         VStack(spacing: 22) {
@@ -64,7 +106,7 @@ struct EmptyDropView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 44, style: .continuous)
                     .strokeBorder(style: StrokeStyle(lineWidth: 2.5, dash: [10, 8]))
-                    .foregroundStyle(targeted ? Color.accentColor : .white.opacity(0.25))
+                    .foregroundStyle(targeted || hovering ? Color.accentColor.opacity(targeted ? 1 : 0.7) : .white.opacity(0.25))
                 Image(systemName: targeted ? "plus.app.fill" : "square.and.arrow.down")
                     .font(.system(size: 54, weight: .light))
                     .foregroundStyle(targeted ? Color.accentColor : .white.opacity(0.6))
@@ -72,8 +114,13 @@ struct EmptyDropView: View {
             }
             .frame(width: 200, height: 200)
             .glass(in: RoundedRectangle(cornerRadius: 44, style: .continuous))
-            .scaleEffect(targeted ? 1.05 : 1)
+            .scaleEffect(targeted ? 1.06 : hovering ? 1.03 : 1)
+            .shadow(color: Color.accentColor.opacity(hovering || targeted ? 0.35 : 0), radius: 30)
             .animation(.spring(duration: 0.3), value: targeted)
+            .animation(.spring(duration: 0.3), value: hovering)
+            .onHover { hovering = $0 }
+            .onTapGesture { store.chooseApps() }
+            .help("Clique para escolher um app, ou arraste um app até aqui")
 
             VStack(spacing: 8) {
                 Text("Solte um app aqui")
@@ -92,6 +139,7 @@ struct EmptyDropView: View {
             }
             .glassButton(prominent: true)
             .controlSize(.large)
+            .hoverLift()
             Spacer()
         }
         .padding(30)
@@ -130,6 +178,7 @@ struct AppShelf: View {
                 }
                 .buttonStyle(.plain)
                 .glass(in: Circle(), interactive: true)
+                .hoverLift(scale: 1.1)
                 .help("Adicionar app (⌘O)")
             }
         }
