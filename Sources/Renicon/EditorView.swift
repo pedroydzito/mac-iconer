@@ -10,45 +10,24 @@ struct EditorView: View {
 
     var body: some View {
         VStack(spacing: 26) {
-            HStack {
-                Button {
-                    nameFocused = false
-                    store.selection = nil
-                } label: {
-                    Label("Voltar", systemImage: "chevron.left")
-                        .font(.callout.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .frame(height: 32)
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .glass(in: Capsule(), interactive: true)
-                .keyboardShortcut("[", modifiers: .command)
-                .help("Voltar ao início (Esc)")
-
-                Spacer()
-                Button {
-                    showInfo.toggle()
-                } label: {
-                    Image(systemName: "info")
-                        .font(.system(size: 14, weight: .bold))
-                        .frame(width: 32, height: 32)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .glass(in: Circle(), interactive: true)
-                .help("Detalhes e opções")
-                .popover(isPresented: $showInfo, arrowEdge: .bottom) {
-                    InfoPanel(entry: $entry) { showInfo = false }
-                }
-            }
-            .padding(.horizontal, 22)
-
             Spacer(minLength: 0)
 
             IconDropZone(entry: entry)
 
             NameField(entry: $entry, focused: $nameFocused) { applyNow() }
+
+            if entry.hasCustomIcon {
+                Toggle(isOn: Binding(
+                    get: { entry.applyIconToOriginal },
+                    set: { store.setApplyToOriginal($0, for: entry.id) }
+                )) {
+                    Text("Mostrar este ícone também com o app aberto (Dock e ⌘Tab)")
+                        .font(.callout)
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help("Aplica o ícone ao app original. Reaplicado sozinho depois de atualizações.")
+            }
 
             if store.resolvedOriginalURL(for: entry) == nil {
                 Label("O app original não foi encontrado. Ele foi apagado?", systemImage: "exclamationmark.triangle.fill")
@@ -62,6 +41,30 @@ struct EditorView: View {
         }
         .padding(.bottom, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    nameFocused = false
+                    store.selection = nil
+                } label: {
+                    Label("Voltar", systemImage: "chevron.left")
+                        .labelStyle(.titleAndIcon)
+                }
+                .keyboardShortcut(.cancelAction)
+                .help("Voltar ao início (Esc)")
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showInfo.toggle()
+                } label: {
+                    Label("Detalhes", systemImage: "info.circle")
+                }
+                .help("Detalhes e opções")
+                .popover(isPresented: $showInfo, arrowEdge: .bottom) {
+                    InfoPanel(entry: $entry) { showInfo = false }
+                }
+            }
+        }
         .onExitCommand {
             if nameFocused { nameFocused = false } else { store.selection = nil }
         }

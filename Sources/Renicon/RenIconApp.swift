@@ -20,7 +20,7 @@ struct RenIconApp: App {
                     UpdateSheet(release: release).environmentObject(updater)
                 }
         }
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .defaultSize(width: 720, height: 680)
         .commands {
             CommandGroup(after: .appInfo) {

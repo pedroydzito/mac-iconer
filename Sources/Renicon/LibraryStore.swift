@@ -29,6 +29,27 @@ final class LibraryStore: ObservableObject {
             entries = decoded
         }
         removeOrphanIcons()
+        migrate()
+    }
+
+    /// Ajustes únicos para bibliotecas criadas em versões anteriores.
+    private func migrate() {
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: "migratedApplyToOriginal") {
+            // Antes da 1.3 a opção vinha desligada; apps com ícone passam a usá-la no app aberto.
+            for i in entries.indices where entries[i].hasCustomIcon && !entries[i].applyIconToOriginal {
+                entries[i].applyIconToOriginal = true
+                entries[i].hasPendingChanges = true
+            }
+            defaults.set(true, forKey: "migratedApplyToOriginal")
+        }
+        if !defaults.bool(forKey: "migratedCompiledLauncher") {
+            // Atalhos antigos usavam um script como executável e não apareciam no Spotlight.
+            for i in entries.indices where entries[i].lastApplied != nil {
+                entries[i].hasPendingChanges = true
+            }
+            defaults.set(true, forKey: "migratedCompiledLauncher")
+        }
     }
 
     private static var decoder: JSONDecoder {

@@ -65,14 +65,23 @@ enum ShortcutBuilder {
             "NSHighResolutionCapable": true,
             "RENOriginalBundleIdentifier": entry.bundleIdentifier ?? "",
             "RENOriginalPath": entry.originalPath,
+            "RENEntryID": entry.id.uuidString,
+            "RENReapplyIcon": entry.applyIconToOriginal,
+            "RENReapplyScript": AutoReapply.scriptURL.path,
         ]
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try data.write(to: contents.appendingPathComponent("Info.plist"))
         try "APPL????".write(to: contents.appendingPathComponent("PkgInfo"), atomically: true, encoding: .utf8)
 
         // Executável: abre o app original repassando argumentos/arquivos.
+        // Executável compilado (o macOS só lista no Spotlight/Launchpad apps com executável
+        // de verdade). Em builds de desenvolvimento sem ele, usa um script como reserva.
         let launcher = macOS.appendingPathComponent("launcher")
-        try launcherScript(for: entry).write(to: launcher, atomically: true, encoding: .utf8)
+        if let compiled = Bundle.main.url(forResource: "RenLauncher", withExtension: nil) {
+            try fm.copyItem(at: compiled, to: launcher)
+        } else {
+            try launcherScript(for: entry).write(to: launcher, atomically: true, encoding: .utf8)
+        }
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
 
         // Ícone

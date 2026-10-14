@@ -28,9 +28,10 @@ struct ContentView: View {
                         .padding(.bottom, 18)
                 }
             }
-            .padding(.top, 28)
             .animation(.spring(duration: 0.35), value: store.selection)
         }
+        .navigationTitle("")
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .frame(minWidth: 640, minHeight: 600)
         .dropDestination(for: URL.self) { urls, _ in
             let apps = urls.filter { $0.pathExtension.lowercased() == "app" }
