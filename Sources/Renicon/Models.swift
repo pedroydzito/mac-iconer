@@ -39,6 +39,9 @@ struct AppEntry: Identifiable, Codable, Hashable {
     var adjustments = IconAdjustments()
     /// Também aplica o ícone ao app original (aparece no Dock enquanto o app está aberto).
     var applyIconToOriginal = false
+    /// Renomeia o arquivo do app original (ex.: FilmCraft.app → Premiere Pro.app). Não mexe no
+    /// conteúdo nem na assinatura; faz o nome ajustado aparecer no Dock/Finder com o app fechado.
+    var renameOriginal = false
     /// Caminho do atalho gerado em ~/Applications.
     var shortcutPath: String?
     var lastApplied: Date?
@@ -72,6 +75,7 @@ struct AppEntry: Identifiable, Codable, Hashable {
         iconStyle = (try? c.decodeIfPresent(IconStyle.self, forKey: .iconStyle)) ?? .macOS
         adjustments = (try? c.decodeIfPresent(IconAdjustments.self, forKey: .adjustments)) ?? IconAdjustments()
         applyIconToOriginal = try c.decodeIfPresent(Bool.self, forKey: .applyIconToOriginal) ?? false
+        renameOriginal = try c.decodeIfPresent(Bool.self, forKey: .renameOriginal) ?? false
         shortcutPath = try c.decodeIfPresent(String.self, forKey: .shortcutPath)
         lastApplied = try? c.decodeIfPresent(Date.self, forKey: .lastApplied)
         hasPendingChanges = try c.decodeIfPresent(Bool.self, forKey: .hasPendingChanges) ?? true

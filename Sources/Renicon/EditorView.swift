@@ -15,6 +15,18 @@ struct EditorView: View {
 
             NameField(entry: $entry, focused: $nameFocused) { applyNow() }
 
+            VStack(alignment: .leading, spacing: 10) {
+            Toggle(isOn: Binding(
+                get: { entry.renameOriginal },
+                set: { store.setRenameOriginal($0, for: entry.id) }
+            )) {
+                Text("Usar o novo nome no próprio app (Dock e Finder com o app fechado)")
+                    .font(.callout)
+            }
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .help("Renomeia o arquivo do app original (ex.: “\(entry.originalName).app” → “\(entry.displayName).app”). Não altera o conteúdo nem a assinatura do app; desligar devolve o nome original.")
+
             if entry.hasCustomIcon {
                 Toggle(isOn: Binding(
                     get: { entry.applyIconToOriginal },
@@ -26,6 +38,7 @@ struct EditorView: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .help("Aplica o ícone ao app original. Reaplicado sozinho depois de atualizações.")
+            }
             }
 
             if store.resolvedOriginalURL(for: entry) == nil {
@@ -56,7 +69,8 @@ struct EditorView: View {
     private var actions: some View {
         GlassGroup(spacing: 14) {
             HStack(spacing: 12) {
-                if let path = entry.shortcutPath, !entry.hasPendingChanges {
+                if let path = entry.shortcutPath ?? (entry.renameOriginal ? store.resolvedOriginalURL(for: entry)?.path : nil),
+                   !entry.hasPendingChanges {
                     Button {
                         NSWorkspace.shared.open(URL(fileURLWithPath: path))
                     } label: {

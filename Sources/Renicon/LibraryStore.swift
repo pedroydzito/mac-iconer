@@ -333,27 +333,36 @@ final class LibraryStore: ObservableObject {
         busy = true
         defer { busy = false }
         if let current = resolvedOriginalURL(for: entry) { entry.originalPath = current.path }
-        let icon = effectiveIcon(for: entry)
-        let snapshot = entry
         do {
-            let url = try await Task.detached(priority: .userInitiated) {
-                try ShortcutBuilder.build(for: snapshot, icon: icon)
-            }.value
+            // Renomeia o arquivo do original (modo "renomear") ou devolve o nome dele.
+            try moveOriginal(&entry, toName: entry.renameOriginal ? entry.displayName : entry.originalName)
+            let icon = effectiveIcon(for: entry)
+            let snapshot = entry
+            var url: URL?
+            if entry.renameOriginal {
+                // O próprio app já tem o nome novo; o atalho só duplicaria no Spotlight.
+                ShortcutBuilder.remove(entry)
+            } else {
+                url = try await Task.detached(priority: .userInitiated) {
+                    try ShortcutBuilder.build(for: snapshot, icon: icon)
+                }.value
+            }
             guard let j = entries.firstIndex(where: { $0.id == id }) else { return false }
             // Mantém edições feitas enquanto aplicava; só marca como aplicado se nada mudou.
             var current = entries[j]
-            current.shortcutPath = url.path
+            current.shortcutPath = url?.path
             current.originalPath = entry.originalPath
             current.lastApplied = Date()
             let unchanged = current.customName == snapshot.customName && current.iconStyle == snapshot.iconStyle
                 && current.adjustments == snapshot.adjustments && current.hasCustomIcon == snapshot.hasCustomIcon
                 && current.applyIconToOriginal == snapshot.applyIconToOriginal
+                && current.renameOriginal == snapshot.renameOriginal
             current.hasPendingChanges = !unchanged
             entries[j] = current
             updateAutoReapply()
             try applyToOriginalIfNeeded(current, force: true)
-            if UserDefaults.standard.string(forKey: "dockMode") == "original",
-               current.applyIconToOriginal, let original = resolvedOriginalURL(for: current)?.path,
+            if UserDefaults.standard.string(forKey: "dockMode") == "original" || current.renameOriginal,
+               let original = resolvedOriginalURL(for: current)?.path,
                DockManager.contains(original) {
                 // O original já está no Dock: troca a etiqueta e força o Dock a reler o ícone.
                 if !DockManager.relabel(original, label: current.displayName) { reloadDock() }
@@ -363,6 +372,46 @@ final class LibraryStore: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    /// Renomeia o arquivo .app do original (sem tocar no conteúdo nem na assinatura).
+    private func moveOriginal(_ entry: inout AppEntry, toName name: String) throws {
+        guard let url = resolvedOriginalURL(for: entry) else { return }
+        let target = url.deletingLastPathComponent()
+            .appendingPathComponent(ShortcutBuilder.sanitize(name) + ".app", isDirectory: true)
+        guard target.path != url.path else { return }
+        let caseOnly = target.path.lowercased() == url.path.lowercased()
+        if !caseOnly && fm.fileExists(atPath: target.path) {
+            throw NSError(domain: "Renicon", code: 6, userInfo: [NSLocalizedDescriptionKey:
+                "Já existe um app chamado “\(target.lastPathComponent)” em \(url.deletingLastPathComponent().path). Escolha outro nome."])
+        }
+        do {
+            if caseOnly {
+                let temp = url.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + ".app")
+                try fm.moveItem(at: url, to: temp)
+                try fm.moveItem(at: temp, to: target)
+            } else {
+                try fm.moveItem(at: url, to: target)
+            }
+        } catch {
+            // Apps instalados pelo administrador: pede a senha do Mac (nada é reassinado).
+            let script = "do shell script \"/bin/mv \" & quoted form of \"\(url.path)\" & \" \" & quoted form of \"\(target.path)\" with administrator privileges"
+            var errorInfo: NSDictionary?
+            NSAppleScript(source: script)?.executeAndReturnError(&errorInfo)
+            if errorInfo != nil || !fm.fileExists(atPath: target.path) {
+                throw NSError(domain: "Renicon", code: 7, userInfo: [NSLocalizedDescriptionKey:
+                    "Não foi possível renomear “\(url.lastPathComponent)”. Dê ao Renicon “Gerenciamento de Apps” em Ajustes do Sistema › Privacidade e Segurança e tente de novo."])
+            }
+        }
+        _ = try? Shell.run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-f", target.path])
+        NSWorkspace.shared.noteFileSystemChanged(target.deletingLastPathComponent().path)
+        DockManager.replace(path: url.path, with: target.path, label: entry.displayName)
+        entry.originalPath = target.path
+        originalIconCache[entry.id] = nil
+    }
+
+    func setRenameOriginal(_ value: Bool, for id: AppEntry.ID) {
+        update(id, actionName: "Renomear App Original") { $0.renameOriginal = value }
     }
 
     func applyAll() async {
@@ -377,8 +426,9 @@ final class LibraryStore: ObservableObject {
 
     func remove(_ id: AppEntry.ID) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
-        let entry = entries[i]
+        var entry = entries[i]
         ShortcutBuilder.remove(entry)
+        if entry.renameOriginal { try? moveOriginal(&entry, toName: entry.originalName) }
         if entry.applyIconToOriginal, let url = resolvedOriginalURL(for: entry) {
             NSWorkspace.shared.setIcon(nil, forFile: url.path, options: [])
         }
@@ -422,6 +472,7 @@ final class LibraryStore: ObservableObject {
     /// O que vai para o Dock: com o ícone aplicado ao original, o próprio app original
     /// (assim o app aberto usa o mesmo item do Dock, sem aparecer duplicado); senão, o atalho.
     private func dockTarget(for entry: AppEntry) -> String? {
+        if entry.renameOriginal, let url = resolvedOriginalURL(for: entry) { return url.path }
         if UserDefaults.standard.string(forKey: "dockMode") == "original", entry.applyIconToOriginal, entry.hasCustomIcon, let url = resolvedOriginalURL(for: entry) { return url.path }
         return entry.shortcutPath
     }
@@ -460,13 +511,18 @@ final class LibraryStore: ObservableObject {
     /// Prepara o script e a regra do launchd que mantêm os ícones sem o Renicon aberto.
     func updateAutoReapply() {
         var items: [AutoReapply.Item] = []
-        for entry in entries where entry.applyIconToOriginal && entry.lastApplied != nil {
-            guard let custom = customIcon(for: entry),
-                  let data = IconRenderer.pngData(for: custom, size: 1024, style: entry.iconStyle, adjustments: entry.adjustments) else { continue }
-            let url = styledIconURL(for: entry)
-            try? data.write(to: url, options: .atomic)
+        for entry in entries where (entry.applyIconToOriginal || entry.renameOriginal) && entry.lastApplied != nil {
+            var iconPath: String?
+            if entry.applyIconToOriginal, let custom = customIcon(for: entry),
+               let data = IconRenderer.pngData(for: custom, size: 1024, style: entry.iconStyle, adjustments: entry.adjustments) {
+                let url = styledIconURL(for: entry)
+                try? data.write(to: url, options: .atomic)
+                iconPath = url.path
+            }
+            let name = entry.renameOriginal ? ShortcutBuilder.sanitize(entry.displayName) : nil
+            guard iconPath != nil || name != nil else { continue }
             let path = resolvedOriginalURL(for: entry)?.path ?? entry.originalPath
-            items.append(.init(id: entry.id.uuidString, bundleID: entry.bundleIdentifier, path: path, icon: url.path))
+            items.append(.init(id: entry.id.uuidString, bundleID: entry.bundleIdentifier, path: path, icon: iconPath, name: name))
         }
         AutoReapply.update(items)
     }

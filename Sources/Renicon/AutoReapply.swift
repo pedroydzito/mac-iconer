@@ -24,7 +24,9 @@ enum AutoReapply {
         let id: String
         let bundleID: String?
         let path: String
-        let icon: String
+        let icon: String?
+        /// Nome desejado para o arquivo .app (modo "renomear o app original").
+        let name: String?
     }
 
     /// Reescreve o manifesto e a regra do launchd a partir da lista atual.
@@ -87,6 +89,15 @@ enum AutoReapply {
                 if (!url.isNil()) path = ObjC.unwrap(url.path);
             }
             if (!fm.fileExistsAtPath(path)) return;
+            if (item.name) {
+                // Uma atualização pode recriar o app com o nome antigo: renomeia de novo.
+                const dir = ObjC.unwrap($(path).stringByDeletingLastPathComponent);
+                const target = dir + '/' + item.name + '.app';
+                if (path !== target && !fm.fileExistsAtPath(target)) {
+                    if (fm.moveItemAtPathToPathError(path, target, null)) path = target;
+                }
+            }
+            if (!item.icon) return;
             if (fm.fileExistsAtPath(path + '/Icon\r')) return;
             const image = $.NSImage.alloc.initWithContentsOfFile(item.icon);
             if (image.isNil()) return;
