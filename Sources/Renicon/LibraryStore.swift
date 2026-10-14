@@ -198,8 +198,11 @@ final class LibraryStore: ObservableObject {
             }
             if bundleID?.hasPrefix("com.renicon.") == true { continue }
             let fileName = url.deletingPathExtension().lastPathComponent
-            let entry = AppEntry(originalPath: url.path, bundleIdentifier: bundleID,
+            var entry = AppEntry(originalPath: url.path, bundleIdentifier: bundleID,
                                  originalName: fileName, customName: fileName)
+            // Se dá para renomear o arquivo sem pedir senha, já usa o nome novo no próprio app.
+            entry.renameOriginal = fm.isWritableFile(atPath: url.deletingLastPathComponent().path)
+                && fm.isWritableFile(atPath: url.path)
             entries.append(entry)
             lastID = entry.id
         }
@@ -216,7 +219,7 @@ final class LibraryStore: ObservableObject {
         if panel.runModal() == .OK { add(urls: panel.urls) }
     }
 
-    func setCustomIcon(_ image: NSImage, for id: AppEntry.ID) {
+    func setCustomIcon(_ image: NSImage, for id: AppEntry.ID, style: IconStyle? = nil) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
         guard let data = IconRenderer.pngData(for: image, size: 1024, style: .original) else {
             errorMessage = "Não foi possível ler essa imagem."
@@ -232,6 +235,7 @@ final class LibraryStore: ObservableObject {
                 entries[i].applyIconToOriginal = true
             }
             entries[i].hasCustomIcon = true
+            entries[i].iconStyle = style ?? IconRenderer.suggestedStyle(for: image)
             entries[i].hasPendingChanges = true
             registerUndo(id: id, restoring: before, iconData: iconBefore, actionName: "Trocar Ícone")
         } catch {
@@ -332,6 +336,8 @@ final class LibraryStore: ObservableObject {
         }
         busy = true
         defer { busy = false }
+        let firstApply = entry.lastApplied == nil
+        let originalWasInDock = resolvedOriginalURL(for: entry).map { DockManager.contains($0.path) } ?? false
         if let current = resolvedOriginalURL(for: entry) { entry.originalPath = current.path }
         do {
             // Renomeia o arquivo do original (modo "renomear") ou devolve o nome dele.
@@ -369,11 +375,34 @@ final class LibraryStore: ObservableObject {
                 let changed = await Task.detached { DockManager.relabel(original, label: label) }.value
                 if !changed { reloadDock() }
             }
+            if firstApply && originalWasInDock {
+                // O app já estava no Dock: troca pelo ajustado sem precisar clicar em nada.
+                busy = false
+                await pinToDock(id)
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    // MARK: - Sugestões de ícone
+
+    @Published var suggestions: [AppEntry.ID: [IconSuggestions.Suggestion]] = [:]
+
+    func loadSuggestions(for id: AppEntry.ID) async {
+        guard suggestions[id] == nil, let entry = entries.first(where: { $0.id == id }) else { return }
+        suggestions[id] = []
+        suggestions[id] = await IconSuggestions.search(for: entry)
+    }
+
+    func useSuggestion(_ suggestion: IconSuggestions.Suggestion, for id: AppEntry.ID) async {
+        guard let image = await IconSuggestions.download(suggestion) else {
+            errorMessage = "Não foi possível baixar esse ícone."
+            return
+        }
+        setCustomIcon(image, for: id, style: suggestion.isMac ? IconRenderer.suggestedStyle(for: image) : .macOS)
     }
 
     /// Renomeia o arquivo .app do original (sem tocar no conteúdo nem na assinatura).

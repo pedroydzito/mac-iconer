@@ -5,6 +5,7 @@ struct EditorView: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var entry: AppEntry
     @State private var inDock = true
+    @State private var autoApply: Task<Void, Never>?
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -12,6 +13,8 @@ struct EditorView: View {
             Spacer(minLength: 0)
 
             IconDropZone(entry: entry)
+
+            SuggestionsRow(entry: entry)
 
             NameField(entry: $entry, focused: $nameFocused) { applyNow() }
 
@@ -53,6 +56,10 @@ struct EditorView: View {
         }
         .padding(.bottom, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Aplica sozinho: logo após trocar o ícone/opções, ou ao terminar de digitar o nome.
+        .onChange(of: entry) { _, _ in scheduleAutoApply() }
+        .onChange(of: nameFocused) { _, _ in scheduleAutoApply() }
+        .onDisappear { if entry.hasPendingChanges && entry.lastApplied != nil { applyNow() } }
         .onChange(of: entry.shortcutPath) { _, _ in inDock = store.isInDock(entry) }
         .onChange(of: entry.applyIconToOriginal) { _, _ in inDock = store.isInDock(entry) }
         // Reconfere quando o usuário volta ao Renicon (pode ter mexido no Dock).
@@ -115,6 +122,16 @@ struct EditorView: View {
             .controlSize(.large)
         }
         .animation(.spring(duration: 0.3), value: entry.hasPendingChanges)
+    }
+
+    private func scheduleAutoApply() {
+        autoApply?.cancel()
+        guard entry.hasPendingChanges, !nameFocused, !store.busy else { return }
+        autoApply = Task {
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled, entry.hasPendingChanges, !nameFocused, !store.busy else { return }
+            await store.apply(entry.id)
+        }
     }
 
     private func applyNow() {
@@ -199,6 +216,57 @@ private struct IconDropZone: View {
             Divider()
             Button("Usar Ícone Original") { store.resetIcon(for: entry.id) }
         }
+    }
+}
+
+// MARK: - Sugestões da App Store
+
+private struct SuggestionsRow: View {
+    @EnvironmentObject private var store: LibraryStore
+    let entry: AppEntry
+    @State private var hovered: String?
+
+    var body: some View {
+        let items = store.suggestions[entry.id] ?? []
+        Group {
+            if !items.isEmpty {
+                VStack(spacing: 8) {
+                    Text("Sugestões da App Store")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(items) { item in
+                                Button {
+                                    Task { await store.useSuggestion(item, for: entry.id) }
+                                } label: {
+                                    AsyncImage(url: item.url) { image in
+                                        image.resizable().interpolation(.high)
+                                    } placeholder: {
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(.white.opacity(0.08))
+                                    }
+                                    .frame(width: 40, height: 40)
+                                    .clipShape(RoundedRectangle(cornerRadius: item.isMac ? 0 : 9, style: .continuous))
+                                    .scaleEffect(hovered == item.id ? 1.15 : 1)
+                                    .animation(.spring(duration: 0.2), value: hovered)
+                                }
+                                .buttonStyle(.plain)
+                                .onHover { hovered = $0 ? item.id : (hovered == item.id ? nil : hovered) }
+                                .help(item.name)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                    }
+                    .frame(maxWidth: 520)
+                    .fixedSize(horizontal: items.count < 9, vertical: false)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: items.count)
+        .task(id: entry.id) { await store.loadSuggestions(for: entry.id) }
     }
 }
 

@@ -59,7 +59,9 @@ Depois que um app roda, o Dock relê o nome direto do **arquivo** do app. Ative 
 
 - Visual escuro com **Liquid Glass** (macOS 26; nas versões 14/15 usa vidro translúcido)
 - Faixa estilo Dock com seus apps na parte de baixo; clique em um para editar e use **‹ Voltar** (ou Esc) para voltar à área de soltar apps
-- Editor: clique no ícone para trocar → digite o nome → **Aplicar**
+- Editor: clique no ícone para trocar (ou escolha uma das **sugestões da App Store**) → digite o nome. As mudanças são **aplicadas sozinhas**
+- Formato automático: imagens com cantos transparentes ficam como estão; imagens quadradas ganham o formato macOS
+- Se o app já estava no Dock, ele é trocado pelo ajustado automaticamente
 - **⌘Z / ⇧⌘Z** para desfazer e refazer nome, ícone, formato e ajustes
 - Ícone: clique, arraste uma imagem (inclusive direto do navegador) ou cole (⋯ › Colar Imagem)
 - A imagem é **copiada** para o Renicon: apagar o arquivo original não afeta nada; remover o app do Renicon apaga a cópia
