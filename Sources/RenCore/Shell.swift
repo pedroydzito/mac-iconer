@@ -18,7 +18,7 @@ public enum Shell {
         try process.run()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        public let output = String(decoding: data, as: UTF8.self)
+        let output = String(decoding: data, as: UTF8.self)
         guard process.terminationStatus == 0 else {
             throw Failure(command: (launchPath as NSString).lastPathComponent, output: output)
         }
