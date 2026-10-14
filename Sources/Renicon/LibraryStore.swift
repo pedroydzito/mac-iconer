@@ -352,7 +352,8 @@ final class LibraryStore: ObservableObject {
             entries[j] = current
             updateAutoReapply()
             try applyToOriginalIfNeeded(current, force: true)
-            if current.applyIconToOriginal, let original = resolvedOriginalURL(for: current)?.path,
+            if UserDefaults.standard.string(forKey: "dockMode") == "original",
+               current.applyIconToOriginal, let original = resolvedOriginalURL(for: current)?.path,
                DockManager.contains(original) {
                 // O original já está no Dock: troca a etiqueta e força o Dock a reler o ícone.
                 if !DockManager.relabel(original, label: current.displayName) { reloadDock() }
@@ -421,7 +422,7 @@ final class LibraryStore: ObservableObject {
     /// O que vai para o Dock: com o ícone aplicado ao original, o próprio app original
     /// (assim o app aberto usa o mesmo item do Dock, sem aparecer duplicado); senão, o atalho.
     private func dockTarget(for entry: AppEntry) -> String? {
-        if entry.applyIconToOriginal, entry.hasCustomIcon, let url = resolvedOriginalURL(for: entry) { return url.path }
+        if UserDefaults.standard.string(forKey: "dockMode") == "original", entry.applyIconToOriginal, entry.hasCustomIcon, let url = resolvedOriginalURL(for: entry) { return url.path }
         return entry.shortcutPath
     }
 
