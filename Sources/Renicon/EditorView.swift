@@ -73,6 +73,11 @@ struct EditorView: View {
             if nameFocused { nameFocused = false } else { store.selection = nil }
         }
         .onChange(of: entry.shortcutPath) { _, _ in inDock = store.isInDock(entry) }
+        .onChange(of: entry.applyIconToOriginal) { _, _ in inDock = store.isInDock(entry) }
+        // Reconfere quando o usuário volta ao Renicon (pode ter mexido no Dock).
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            inDock = store.isInDock(entry)
+        }
         .onAppear {
             inDock = store.isInDock(entry)
             // Recém-adicionado: já coloca o cursor no nome.
@@ -92,17 +97,17 @@ struct EditorView: View {
                     }
                     .glassButton()
 
-                    if !inDock {
-                        Button {
-                            store.pinToDock(entry.id)
-                            inDock = true
-                        } label: {
-                            Label("Pôr no Dock", systemImage: "dock.rectangle")
-                                .padding(.horizontal, 4)
-                        }
-                        .glassButton()
-                        .help("Fixa no Dock com o novo nome e ícone. Ao abrir o app, ele usa este mesmo item do Dock.")
+                    Button {
+                        store.pinToDock(entry.id)
+                        inDock = true
+                    } label: {
+                        Label(inDock ? "No Dock" : "Pôr no Dock",
+                              systemImage: inDock ? "checkmark.rectangle" : "dock.rectangle")
+                            .padding(.horizontal, 4)
                     }
+                    .glassButton()
+                    .help(inDock ? "Já está no Dock. Clique para atualizar nome e ícone lá."
+                                 : "Fixa no Dock com o novo nome e ícone. Ao abrir o app, ele usa este mesmo item do Dock.")
                 }
 
                 Button(action: applyNow) {
