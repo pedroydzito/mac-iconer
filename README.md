@@ -46,9 +46,9 @@ Ou seja: abra o Renicon, ajuste, clique em **Aplicar** e feche. Se o Dock demora
 
 > Para alterar o ícone de apps em `/Applications` o macOS pode pedir permissão: em **Ajustes do Sistema › Privacidade e Segurança**, dê ao Renicon "Gerenciamento de Apps" (ou "Acesso Total ao Disco").
 
-### Nome com o app fechado (sem reassinar)
+### Nome e ícone no Dock
 
-Depois que um app roda, o Dock relê o nome direto do **arquivo** do app. Ative **“Usar o novo nome no próprio app”** para o Renicon renomear o arquivo (ex.: `FilmCraft.app` → `Premiere Pro.app`). O conteúdo e a assinatura do app não são alterados. Se uma atualização recriar o app com o nome antigo, a regra do launchd renomeia de novo. Desligar a opção ou remover o app do Renicon devolve o nome original.
+O app original **nunca é renomeado, movido ou reassinado** — instaladores e atualizadores (como o Creative Cloud) continuam encontrando o app normalmente. No Dock fica fixado o **atalho**, que sempre mostra o seu nome e ícone. Com o app aberto, o macOS mostra ao lado o app em execução com o nome original; ao fechar, fica só o atalho.
 
 ### Limitações honestas
 

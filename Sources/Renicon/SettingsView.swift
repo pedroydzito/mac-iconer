@@ -4,25 +4,9 @@ struct SettingsView: View {
     @EnvironmentObject private var store: LibraryStore
     @EnvironmentObject private var updater: Updater
     @State private var confirmReset = false
-    @AppStorage("dockMode") private var dockMode = "shortcut"
 
     var body: some View {
         Form {
-            Section {
-                Picker("Item no Dock", selection: $dockMode) {
-                    Text("Atalho").tag("shortcut")
-                    Text("App original").tag("original")
-                }
-                .pickerStyle(.radioGroup)
-            } header: {
-                Text("Dock")
-            } footer: {
-                Text(dockMode == "shortcut"
-                     ? "O item fixado sempre mostra o seu nome e ícone. Com o app aberto, ele aparece ao lado com o ícone e o nome originais."
-                     : "Um só item no Dock. Com o app aberto, o macOS mostra o ícone e o nome originais, e o nome original pode ficar mesmo depois de fechar.")
-                    .foregroundStyle(.secondary)
-            }
-
             Section {
                 LabeledContent("Pasta") {
                     Button("Mostrar no Finder") {
