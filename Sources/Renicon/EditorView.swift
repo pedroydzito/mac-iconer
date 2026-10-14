@@ -5,7 +5,7 @@ struct EditorView: View {
     @EnvironmentObject private var store: LibraryStore
     @Binding var entry: AppEntry
     @State private var showInfo = false
-    @State private var justApplied = false
+    @State private var inDock = true
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -15,7 +15,7 @@ struct EditorView: View {
                     nameFocused = false
                     store.selection = nil
                 } label: {
-                    Label("Apps", systemImage: "chevron.left")
+                    Label("Voltar", systemImage: "chevron.left")
                         .font(.callout.weight(.semibold))
                         .padding(.horizontal, 12)
                         .frame(height: 32)
@@ -24,7 +24,7 @@ struct EditorView: View {
                 .buttonStyle(.plain)
                 .glass(in: Capsule(), interactive: true)
                 .keyboardShortcut("[", modifiers: .command)
-                .help("Voltar para todos os apps (Esc)")
+                .help("Voltar ao início (Esc)")
 
                 Spacer()
                 Button {
@@ -65,7 +65,9 @@ struct EditorView: View {
         .onExitCommand {
             if nameFocused { nameFocused = false } else { store.selection = nil }
         }
+        .onChange(of: entry.shortcutPath) { _, _ in inDock = store.isInDock(entry) }
         .onAppear {
+            inDock = store.isInDock(entry)
             // Recém-adicionado: já coloca o cursor no nome.
             if entry.lastApplied == nil { nameFocused = true }
         }
@@ -83,9 +85,10 @@ struct EditorView: View {
                     }
                     .glassButton()
 
-                    if !store.isInDock(entry) {
+                    if !inDock {
                         Button {
                             store.pinToDock(entry.id)
+                            inDock = true
                         } label: {
                             Label("Pôr no Dock", systemImage: "dock.rectangle")
                                 .padding(.horizontal, 4)

@@ -54,7 +54,7 @@ Ou seja: abra o Renicon, ajuste, clique em **Aplicar** e feche. Se o Dock demora
 ## Recursos
 
 - Visual escuro com **Liquid Glass** (macOS 26; nas versões 14/15 usa vidro translúcido)
-- Tela inicial com todos os seus apps; clique em um para editar e use **‹ Apps** (ou Esc) para voltar
+- Faixa estilo Dock com seus apps na parte de baixo; clique em um para editar e use **‹ Voltar** (ou Esc) para voltar à área de soltar apps
 - Editor: clique no ícone para trocar → digite o nome → **Aplicar**
 - **⌘Z / ⇧⌘Z** para desfazer e refazer nome, ícone, formato e ajustes
 - Ícone: clique, arraste uma imagem (inclusive direto do navegador) ou cole (⋯ › Colar Imagem)
