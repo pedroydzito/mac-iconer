@@ -80,14 +80,17 @@ struct EditorView: View {
                     .glassButton()
 
                     Button {
-                        store.pinToDock(entry.id)
-                        inDock = true
+                        Task {
+                            await store.pinToDock(entry.id)
+                            inDock = store.isInDock(entry)
+                        }
                     } label: {
                         Label(inDock ? "No Dock" : "Pôr no Dock",
                               systemImage: inDock ? "checkmark.rectangle" : "dock.rectangle")
                             .padding(.horizontal, 4)
                     }
                     .glassButton()
+                    .disabled(store.busy)
                     .help(inDock ? "Já está no Dock. Clique para atualizar nome e ícone lá."
                                  : "Fixa no Dock com o novo nome e ícone. Ao abrir o app, ele usa este mesmo item do Dock.")
                 }

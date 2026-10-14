@@ -365,7 +365,9 @@ final class LibraryStore: ObservableObject {
                let original = resolvedOriginalURL(for: current)?.path,
                DockManager.contains(original) {
                 // O original já está no Dock: troca a etiqueta e força o Dock a reler o ícone.
-                if !DockManager.relabel(original, label: current.displayName) { reloadDock() }
+                let label = current.displayName
+                let changed = await Task.detached { DockManager.relabel(original, label: label) }.value
+                if !changed { reloadDock() }
             }
             return true
         } catch {
@@ -484,11 +486,19 @@ final class LibraryStore: ObservableObject {
         return true
     }
 
-    func pinToDock(_ id: AppEntry.ID) {
-        guard let entry = entries.first(where: { $0.id == id }), let target = dockTarget(for: entry) else { return }
+    /// Fixa no Dock fora da thread principal (o Dock é reiniciado e conferido).
+    @discardableResult
+    func pinToDock(_ id: AppEntry.ID) async -> Bool {
+        guard let entry = entries.first(where: { $0.id == id }), let target = dockTarget(for: entry) else { return false }
         let others = [entry.shortcutPath, resolvedOriginalURL(for: entry)?.path].compactMap { $0 }
-        DockManager.pin(target, replacing: others, label: entry.displayName)
+        let label = entry.displayName
+        busy = true
+        defer { busy = false }
+        await Task.detached { DockManager.pin(target, replacing: others, label: label) }.value
         objectWillChange.send()
+        let pinned = DockManager.contains(target)
+        if !pinned { errorMessage = "O Dock não aceitou a mudança. Tente de novo em alguns segundos." }
+        return pinned
     }
 
     /// Força o Finder/Dock a reler o ícone de um pacote.

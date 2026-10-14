@@ -10,10 +10,17 @@ enum DockManager {
         return CFPreferencesCopyAppValue(key, domain) as? [[String: Any]] ?? []
     }
 
+    /// Grava a lista e reinicia o Dock. O Dock é encerrado com SIGKILL para não regravar a
+    /// lista antiga ao fechar; depois confere se a mudança pegou e tenta de novo se preciso.
     private static func save(_ apps: [[String: Any]]) {
-        CFPreferencesSetAppValue(key, apps as CFArray, domain)
-        CFPreferencesAppSynchronize(domain)
-        try? Shell.run("/usr/bin/killall", ["Dock"])
+        let wanted = apps.compactMap(path(of:))
+        for attempt in 0..<3 {
+            CFPreferencesSetAppValue(key, apps as CFArray, domain)
+            CFPreferencesAppSynchronize(domain)
+            _ = try? Shell.run("/usr/bin/killall", ["-KILL", "Dock"])
+            Thread.sleep(forTimeInterval: attempt == 0 ? 1.2 : 2)
+            if persistentApps().compactMap(path(of:)) == wanted { return }
+        }
     }
 
     private static func path(of tile: [String: Any]) -> String? {
