@@ -407,7 +407,9 @@ final class LibraryStore: ObservableObject {
         }
         _ = try? Shell.run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-f", target.path])
         NSWorkspace.shared.noteFileSystemChanged(target.deletingLastPathComponent().path)
-        DockManager.replace(path: url.path, with: target.path, label: entry.displayName)
+        // A etiqueta do Dock acompanha o nome que o arquivo acabou de ganhar.
+        let (oldPath, newPath) = (url.path, target.path)
+        Task.detached { DockManager.replace(path: oldPath, with: newPath, label: name) }
         entry.originalPath = target.path
         originalIconCache[entry.id] = nil
     }
@@ -431,6 +433,11 @@ final class LibraryStore: ObservableObject {
         var entry = entries[i]
         ShortcutBuilder.remove(entry)
         if entry.renameOriginal { try? moveOriginal(&entry, toName: entry.originalName) }
+        // Se o app original continua no Dock, devolve a etiqueta original.
+        if let original = resolvedOriginalURL(for: entry)?.path {
+            let label = entry.originalName
+            Task.detached { DockManager.relabel(original, label: label) }
+        }
         if entry.applyIconToOriginal, let url = resolvedOriginalURL(for: entry) {
             NSWorkspace.shared.setIcon(nil, forFile: url.path, options: [])
         }

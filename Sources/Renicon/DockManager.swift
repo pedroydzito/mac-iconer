@@ -4,6 +4,8 @@ import Foundation
 enum DockManager {
     private static let domain = "com.apple.dock" as CFString
     private static let key = "persistent-apps" as CFString
+    /// Uma alteração por vez: cada uma lê, muda, grava e reinicia o Dock.
+    private static let lock = NSLock()
 
     private static func persistentApps() -> [[String: Any]] {
         CFPreferencesAppSynchronize(domain)
@@ -56,6 +58,8 @@ enum DockManager {
     /// Fixa `target` no Dock com a etiqueta `label`. Se algum dos caminhos em `replacing`
     /// já estiver fixado, o novo item ocupa o lugar dele (e duplicatas são removidas).
     static func pin(_ target: String, replacing others: [String], label: String) {
+        lock.lock()
+        defer { lock.unlock() }
         var apps = persistentApps()
         let paths = Set(([target] + others).map(normalize))
         let newTile = tile(for: target, label: label)
@@ -73,6 +77,8 @@ enum DockManager {
     /// Atualiza a etiqueta de um item já fixado. Retorna se havia algo para mudar.
     @discardableResult
     static func relabel(_ appPath: String, label: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
         var apps = persistentApps()
         guard let index = apps.firstIndex(where: { path(of: $0) == normalize(appPath) }),
               var tileData = apps[index]["tile-data"] as? [String: Any],
@@ -85,6 +91,8 @@ enum DockManager {
 
     /// Quando o atalho é renomeado, o item fixado passa a apontar para o novo caminho.
     static func replace(path old: String, with new: String, label: String) {
+        lock.lock()
+        defer { lock.unlock() }
         var apps = persistentApps()
         guard let index = apps.firstIndex(where: { path(of: $0) == normalize(old) }) else { return }
         apps[index] = tile(for: new, label: label)
@@ -92,6 +100,8 @@ enum DockManager {
     }
 
     static func unpin(_ appPath: String) {
+        lock.lock()
+        defer { lock.unlock() }
         var apps = persistentApps()
         let before = apps.count
         apps.removeAll { path(of: $0) == normalize(appPath) }
