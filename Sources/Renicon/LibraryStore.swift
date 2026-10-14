@@ -15,6 +15,12 @@ final class LibraryStore: ObservableObject {
     private var databaseURL: URL { supportURL.appendingPathComponent("library.json") }
     /// Ícones originais guardados antes de aplicar o ícone personalizado ao app original.
     private var originalIconCache: [UUID: NSImage] = [:]
+    /// Ícones já estilizados, para não renderizar de novo a cada atualização da tela.
+    private var styledIconCache: [String: NSImage] = [:]
+    private lazy var watcher = FolderWatcher { [weak self] in
+        Task { @MainActor in self?.scheduleSync() }
+    }
+    private var pendingSync: DispatchWorkItem?
 
     init() {
         supportURL = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -91,8 +97,12 @@ final class LibraryStore: ObservableObject {
 
     /// Ícone final (já estilizado) que o atalho vai usar.
     func effectiveIcon(for entry: AppEntry) -> NSImage {
+        let key = "\(entry.id)-\(entry.iconStyle.rawValue)"
+        if entry.hasCustomIcon, let cached = styledIconCache[key] { return cached }
         if let custom = customIcon(for: entry) {
-            return IconRenderer.styledImage(custom, style: entry.iconStyle)
+            let styled = IconRenderer.styledImage(custom, style: entry.iconStyle)
+            styledIconCache[key] = styled
+            return styled
         }
         return originalIcon(for: entry)
     }
@@ -136,6 +146,7 @@ final class LibraryStore: ObservableObject {
         }
         do {
             try data.write(to: customIconURL(for: entries[i]), options: .atomic)
+            clearStyledCache(for: id)
             entries[i].hasCustomIcon = true
             entries[i].hasPendingChanges = true
         } catch {
@@ -165,8 +176,13 @@ final class LibraryStore: ObservableObject {
     func resetIcon(for id: AppEntry.ID) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
         try? fm.removeItem(at: customIconURL(for: entries[i]))
+        clearStyledCache(for: id)
         entries[i].hasCustomIcon = false
         entries[i].hasPendingChanges = true
+    }
+
+    private func clearStyledCache(for id: UUID) {
+        styledIconCache = styledIconCache.filter { !$0.key.hasPrefix(id.uuidString) }
     }
 
     // MARK: - Aplicar
@@ -223,13 +239,42 @@ final class LibraryStore: ObservableObject {
         let marker = url.appendingPathComponent("Icon\r").path
         if !force && fm.fileExists(atPath: marker) { return }
         let styled = IconRenderer.styledImage(custom, style: entry.iconStyle, size: 1024)
-        if !NSWorkspace.shared.setIcon(styled, forFile: url.path, options: []) {
+        if NSWorkspace.shared.setIcon(styled, forFile: url.path, options: []) {
+            refreshIcon(at: url)
+        } else {
             throw NSError(domain: "Renicon", code: 1, userInfo: [NSLocalizedDescriptionKey:
                 "Sem permissão para alterar o ícone de \(entry.originalName). O atalho foi criado normalmente; dê ao Renicon “Acesso Total ao Disco” ou “Gerenciamento de Apps” em Ajustes do Sistema > Privacidade e Segurança."])
         }
     }
 
+    /// Força o Finder/Dock a reler o ícone de um pacote.
+    private func refreshIcon(at url: URL) {
+        try? fm.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+        NSWorkspace.shared.noteFileSystemChanged(url.path)
+    }
+
+    /// Reinicia o Dock para que ele mostre os ícones novos imediatamente.
+    func reloadDock() {
+        try? Shell.run("/usr/bin/killall", ["Dock"])
+    }
+
     // MARK: - Sincronização (após atualizações)
+
+    /// Começa a observar as pastas dos apps originais: quando um app é atualizado,
+    /// o Renicon percebe na hora e reaplica o ícone.
+    func startWatching() {
+        let folders = Set(entries.compactMap { resolvedOriginalURL(for: $0)?.deletingLastPathComponent().path })
+        watcher.watch(Array(folders) + [ShortcutBuilder.folder.path])
+    }
+
+    func scheduleSync(after seconds: Double = 3) {
+        pendingSync?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            Task { @MainActor in self?.sync() }
+        }
+        pendingSync = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
 
     /// Verifica todos os apps: segue apps movidos, recria atalhos apagados e
     /// reaplica ícones que foram perdidos em uma atualização.
@@ -249,5 +294,6 @@ final class LibraryStore: ObservableObject {
             try? applyToOriginalIfNeeded(entry, force: false)
             if entry != entries[i] { entries[i] = entry }
         }
+        startWatching()
     }
 }

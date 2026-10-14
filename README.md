@@ -4,6 +4,31 @@ App nativo para macOS (SwiftUI) que deixa você dar **um novo nome e um novo íc
 
 Exemplo: arraste o **Adobe Photoshop 2026** para o Renicon, escolha uma imagem nova e renomeie para **Photoshop**. Depois disso, ao buscar "Photoshop" no Spotlight, ele aparece com o seu ícone e o seu nome.
 
+## Instalar (sem precisar de código)
+
+1. Abra a página de [**Releases**](https://github.com/pedroydzito/mac-renicon/releases/latest) e baixe o **Renicon.dmg**.
+2. Abra o `.dmg` e arraste o **Renicon** para a pasta **Aplicativos**.
+3. Na primeira vez, o macOS avisa que não consegue verificar o desenvolvedor (o app não é notarizado pela Apple). Para liberar:
+   - abra o Renicon uma vez e clique em **OK**;
+   - vá em **Ajustes do Sistema › Privacidade e Segurança**, role até o aviso sobre o Renicon e clique em **Abrir Mesmo Assim**.
+
+Isso só é necessário na primeira instalação. Depois, o próprio Renicon avisa quando houver uma versão nova e se atualiza sozinho.
+
+## Atualizações automáticas
+
+O Renicon consulta as Releases deste repositório ao abrir e a cada 6 horas. Quando há uma versão nova, ele mostra o número da versão e as novidades e pergunta se você quer **Instalar e Reiniciar**, **Lembrar Depois** ou **Pular Esta Versão**. Também dá para procurar manualmente em **Renicon › Procurar Atualizações…** ou nos Ajustes.
+
+### Publicar uma nova versão (para o mantenedor)
+
+Crie uma tag com o número da versão e envie para o GitHub:
+
+```sh
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+O GitHub Actions compila o app, gera `Renicon.dmg` e `Renicon.zip` e publica a Release. Os apps já instalados recebem o aviso de atualização.
+
 ## Como funciona
 
 Para cada app, o Renicon cria um **app atalho** em `~/Applications/Renicon/`:
@@ -17,7 +42,7 @@ Para cada app, o Renicon cria um **app atalho** em `~/Applications/Renicon/`:
 
 Quando o app original está aberto, o Dock mostra o ícone *dele*. Ative **"Usar este ícone também no app original"** para aplicar o seu ícone ao app original também (é um ícone personalizado do Finder, o mesmo de "Obter Informações › colar ícone").
 
-Uma atualização substitui o pacote do app e apaga esse ícone, por isso o Renicon fica observando: quando um app abre/fecha e a cada 15 minutos, ele confere e **reaplica o ícone automaticamente**. Para isso, deixe o Renicon aberto (ou na barra de menus) e ative **Abrir ao iniciar sessão** nos Ajustes.
+Uma atualização substitui o pacote do app e apaga esse ícone, por isso o Renicon fica observando a pasta dos apps (FSEvents): assim que um app é atualizado, ele **reaplica o ícone automaticamente** (e confere também quando apps abrem/fecham e a cada 15 minutos). Se o Dock demorar para mostrar o ícone novo, use **Ajustes › Recarregar Dock**. Para isso, deixe o Renicon aberto (ou na barra de menus) e ative **Abrir ao iniciar sessão** nos Ajustes.
 
 > Para alterar o ícone de apps em `/Applications` o macOS pode pedir permissão: em **Ajustes do Sistema › Privacidade e Segurança**, dê ao Renicon "Gerenciamento de Apps" (ou "Acesso Total ao Disco").
 
@@ -35,12 +60,12 @@ Uma atualização substitui o pacote do app e apaga esse ícone, por isso o Reni
 - Ajustes: abrir ao iniciar sessão, continuar rodando em segundo plano, ícone na barra de menus
 - Biblioteca salva em `~/Library/Application Support/Renicon`
 
-## Compilar
+## Compilar a partir do código
 
 Requer macOS 14+ e Xcode 15+ (ou as Command Line Tools).
 
 ```sh
-./build.sh
+./build.sh 1.0.0
 mv build/Renicon.app /Applications/
 ```
 
@@ -56,4 +81,6 @@ Também dá para abrir a pasta no Xcode (`File › Open…` e escolher `Package.
 | `SettingsView.swift` | Ajustes |
 | `LibraryStore.swift` | Biblioteca, persistência e sincronização após atualizações |
 | `ShortcutBuilder.swift` | Gera o app atalho (Info.plist, launcher, .icns, assinatura, Spotlight) |
+| `Updater.swift` | Verificação e instalação de novas versões pelo GitHub |
+| `FolderWatcher.swift` | Detecta na hora quando um app é atualizado |
 | `IconRenderer.swift` | Renderização dos ícones e geração de `.icns` |

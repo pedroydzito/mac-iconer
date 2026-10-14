@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var store: LibraryStore
+    @EnvironmentObject private var updater: Updater
     @AppStorage("keepRunning") private var keepRunning = true
     @AppStorage("showMenuBar") private var showMenuBar = true
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -42,6 +43,34 @@ struct SettingsView: View {
                         Button("Recriar Todos") { store.applyAll() }
                     }
                 }
+                LabeledContent("Dock") {
+                    Button("Recarregar Dock") { store.reloadDock() }
+                }
+            }
+
+            Section {
+                LabeledContent("Versão", value: Updater.currentVersion)
+                Toggle("Procurar atualizações automaticamente", isOn: $updater.autoCheck)
+                LabeledContent {
+                    HStack {
+                        switch updater.phase {
+                        case .checking: ProgressView().controlSize(.small)
+                        case .upToDate: Text("Você está na versão mais recente.").foregroundStyle(.secondary)
+                        case .failed(let message): Text(message).foregroundStyle(.red).lineLimit(2)
+                        default: EmptyView()
+                        }
+                        Button("Procurar Agora") { Task { await updater.check(userInitiated: true) } }
+                            .disabled(updater.phase == .checking)
+                    }
+                } label: {
+                    if let date = updater.lastCheck {
+                        Text("Última verificação: \(date.formatted(date: .abbreviated, time: .shortened))")
+                    } else {
+                        Text("Atualizações")
+                    }
+                }
+            } header: {
+                Text("Atualizações do Renicon")
             }
         }
         .formStyle(.grouped)

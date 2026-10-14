@@ -6,17 +6,29 @@ import SwiftUI
 struct RenIconApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var store = LibraryStore()
+    @StateObject private var updater = Updater()
     @AppStorage("showMenuBar") private var showMenuBar = true
 
     var body: some Scene {
         Window("Renicon", id: "main") {
             ContentView()
                 .environmentObject(store)
+                .environmentObject(updater)
                 .frame(minWidth: 760, minHeight: 500)
-                .onAppear { delegate.store = store; store.sync() }
+                .onAppear {
+                    delegate.store = store
+                    store.sync()
+                    updater.start()
+                }
+                .sheet(item: Binding(get: { updater.available }, set: { updater.available = $0 })) { release in
+                    UpdateSheet(release: release).environmentObject(updater)
+                }
         }
         .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Procurar Atualizações…") { Task { await updater.check(userInitiated: true) } }
+            }
             CommandGroup(after: .newItem) {
                 Button("Adicionar App…") { store.chooseApps() }
                     .keyboardShortcut("o")
@@ -28,6 +40,7 @@ struct RenIconApp: App {
         Settings {
             SettingsView()
                 .environmentObject(store)
+                .environmentObject(updater)
         }
 
         MenuBarExtra("Renicon", systemImage: "app.badge.checkmark", isInserted: $showMenuBar) {
@@ -36,6 +49,7 @@ struct RenIconApp: App {
                 NSApp.windows.first { $0.identifier?.rawValue == "main" }?.makeKeyAndOrderFront(nil)
             }
             Button("Verificar Apps Agora") { store.sync() }
+            Button("Procurar Atualizações…") { Task { await updater.check(userInitiated: true) } }
             Divider()
             Button("Sair") { NSApp.terminate(nil) }
         }
