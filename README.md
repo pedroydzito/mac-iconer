@@ -6,7 +6,7 @@ Exemplo: arraste o **Adobe Photoshop 2026** para o Iconer, escolha uma imagem no
 
 ## Instalar (sem precisar de código)
 
-1. Abra a página de [**Releases**](https://github.com/pedroydzito/mac-renicon/releases/latest) e baixe o **Iconer.dmg**.
+1. Abra a página de [**Releases**](https://github.com/pedroydzito/mac-iconer/releases/latest) e baixe o **Iconer.dmg**.
 2. Abra o `.dmg` e arraste o **Iconer** para a pasta **Aplicativos**.
 3. Na primeira vez, o macOS avisa que não consegue verificar o desenvolvedor (o app não é notarizado pela Apple). Para liberar:
    - abra o Iconer uma vez e clique em **OK**;

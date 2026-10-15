@@ -5,7 +5,7 @@ import SwiftUI
 /// Verifica as Releases do GitHub e instala novas versões do próprio Iconer.
 @MainActor
 final class Updater: ObservableObject {
-    static let repository = "pedroydzito/mac-renicon"
+    static let repository = "pedroydzito/mac-iconer"
 
     struct Release: Equatable, Identifiable {
         var id: String { version }
