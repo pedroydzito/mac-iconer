@@ -85,6 +85,10 @@ final class Updater: ObservableObject {
             guard Self.isVersion(version, newerThan: Self.currentVersion),
                   let asset = json.assets.first(where: { $0.name.hasSuffix(".zip") }) else {
                 phase = .upToDate
+                if userInitiated {
+                    Self.alert("O Iconer está atualizado",
+                               "Você tem a versão \(Self.currentVersion). A mais recente no GitHub é a \(version).")
+                }
                 return
             }
             if !userInitiated && version == skippedVersion {
@@ -92,12 +96,37 @@ final class Updater: ObservableObject {
                 return
             }
             phase = .idle
-            available = Release(version: version, notes: json.body ?? "",
-                                downloadURL: asset.browser_download_url, pageURL: json.html_url)
+            let release = Release(version: version, notes: json.body ?? "",
+                                  downloadURL: asset.browser_download_url, pageURL: json.html_url)
+            available = release
+            // Sem a janela principal aberta, a janela de aviso não aparece: pergunta direto.
+            if userInitiated && !NSApp.windows.contains(where: { $0.isVisible && $0.identifier?.rawValue == "main" }) {
+                let alert = NSAlert()
+                alert.messageText = "Iconer \(version) disponível"
+                alert.informativeText = "Você tem a versão \(Self.currentVersion). Deseja instalar agora?"
+                alert.addButton(withTitle: "Instalar e Reiniciar")
+                alert.addButton(withTitle: "Depois")
+                NSApp.activate(ignoringOtherApps: true)
+                if alert.runModal() == .alertFirstButtonReturn { await install(release) }
+            }
         } catch {
             lastError = error.localizedDescription
             phase = userInitiated ? .failed("Não foi possível verificar: \(error.localizedDescription)") : .idle
+            if userInitiated {
+                Self.alert("Não foi possível procurar atualizações",
+                           "\(error.localizedDescription)\n\nVersão atual: \(Self.currentVersion)")
+            }
         }
+    }
+
+    /// Resultado sempre visível para a verificação manual (não depende da janela principal).
+    private static func alert(_ title: String, _ message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     /// Erro da última verificação automática (aparece nos Ajustes).
