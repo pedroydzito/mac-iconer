@@ -116,8 +116,10 @@ final class LibraryStore: ObservableObject {
 
     /// Localiza o app original atual (segue o bundle identifier se o app foi movido/atualizado).
     func resolvedOriginalURL(for entry: AppEntry) -> URL? {
+        // O LaunchServices pode lembrar de um app já apagado: confere se o arquivo existe.
         if let id = entry.bundleIdentifier,
-           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+           let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id),
+           fm.fileExists(atPath: url.path) {
             return url
         }
         return fm.fileExists(atPath: entry.originalPath) ? entry.originalURL : nil
@@ -190,6 +192,7 @@ final class LibraryStore: ObservableObject {
     /// Ao voltar para o Iconer: relê os ícones originais (um app pode ter sido atualizado).
     func refreshAfterActivation() {
         originalIconCache.removeAll()
+        removeUninstalledApps()
         objectWillChange.send()
     }
 
@@ -663,7 +666,7 @@ final class LibraryStore: ObservableObject {
     /// Prepara o script e a regra do launchd que mantêm os ícones sem o Iconer aberto.
     func updateAutoReapply() {
         var items: [AutoReapply.Item] = []
-        for entry in entries where entry.applyIconToOriginal && entry.lastApplied != nil {
+        for entry in entries where entry.lastApplied != nil {
             var iconPath: String?
             if entry.applyIconToOriginal, let custom = customIcon(for: entry),
                let data = IconRenderer.pngData(for: custom, size: 1024, style: entry.iconStyle, adjustments: entry.adjustments) {
@@ -671,9 +674,10 @@ final class LibraryStore: ObservableObject {
                 try? data.write(to: url, options: .atomic)
                 iconPath = url.path
             }
-            guard iconPath != nil else { continue }
+
             let path = resolvedOriginalURL(for: entry)?.path ?? entry.originalPath
-            items.append(.init(id: entry.id.uuidString, bundleID: entry.bundleIdentifier, path: path, icon: iconPath, name: nil))
+            items.append(.init(id: entry.id.uuidString, bundleID: entry.bundleIdentifier, path: path, icon: iconPath, name: nil,
+                               shortcut: entry.shortcutPath))
         }
         AutoReapply.update(items)
         updateDockHelper()
@@ -700,7 +704,18 @@ final class LibraryStore: ObservableObject {
 
     /// Verifica todos os apps: segue apps movidos, recria atalhos apagados e
     /// reaplica ícones que foram perdidos em uma atualização.
+    /// Apps desinstalados saem do Iconer (atalho, Dock, Spotlight e cópias de ícone).
+    func removeUninstalledApps() {
+        let gone = entries.filter { resolvedOriginalURL(for: $0) == nil && !fm.fileExists(atPath: $0.originalPath) }
+        guard !gone.isEmpty else { return }
+        for entry in gone { remove(entry.id) }
+        showToast(gone.count == 1
+                  ? "“\(gone[0].displayName)” foi desinstalado e saiu do Iconer"
+                  : "\(gone.count) apps desinstalados saíram do Iconer")
+    }
+
     func sync() {
+        removeUninstalledApps()
         for i in entries.indices {
             var entry = entries[i]
             guard entry.lastApplied != nil else { continue }

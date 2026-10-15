@@ -28,6 +28,8 @@ enum AutoReapply {
         let icon: String?
         /// Nome desejado para o arquivo .app (modo "renomear o app original").
         let name: String?
+        /// Atalho do app, apagado se o app for desinstalado com o Iconer fechado.
+        var shortcut: String? = nil
     }
 
     /// Reescreve o manifesto e a regra do launchd a partir da lista atual.
@@ -87,9 +89,21 @@ enum AutoReapply {
             let path = item.path;
             if (item.bundleID) {
                 const url = ws.URLForApplicationWithBundleIdentifier(item.bundleID);
-                if (!url.isNil()) path = ObjC.unwrap(url.path);
+                if (!url.isNil() && fm.fileExistsAtPath(ObjC.unwrap(url.path))) path = ObjC.unwrap(url.path);
             }
-            if (!fm.fileExistsAtPath(path)) return;
+            if (!fm.fileExistsAtPath(path)) {
+                // O app sumiu. Pode ser só uma atualização trocando o pacote: espera e confere de novo.
+                if (!item.shortcut || !fm.fileExistsAtPath(item.shortcut)) return;
+                delay(20);
+                if (fm.fileExistsAtPath(item.path)) return;
+                if (item.bundleID) {
+                    const found = ws.URLForApplicationWithBundleIdentifier(item.bundleID);
+                    if (!found.isNil() && fm.fileExistsAtPath(ObjC.unwrap(found.path))) return;
+                }
+                // Desinstalado: remove o atalho (o Iconer limpa o resto quando for aberto).
+                fm.removeItemAtPathError(item.shortcut, null);
+                return;
+            }
             if (item.name) {
                 // Uma atualização pode recriar o app com o nome antigo: renomeia de novo.
                 const dir = ObjC.unwrap($(path).stringByDeletingLastPathComponent);
