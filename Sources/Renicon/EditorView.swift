@@ -248,41 +248,58 @@ private struct IconDropZone: View {
 private struct SuggestionsRow: View {
     @EnvironmentObject private var store: LibraryStore
     let entry: AppEntry
+    @State private var tab = 0  // 0 = Recentes, 1 = Sugestões
 
     var body: some View {
         let items = store.suggestions[entry.id] ?? []
         let recents = store.recentIcons
-        VStack(spacing: 12) {
-            if items.isEmpty && store.loadingSuggestions.contains(entry.id) {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Buscando sugestões…").font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            Picker("", selection: $tab) {
+                Text("Recentes").tag(0)
+                Text("Sugestões").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 220)
+
+            Group {
+                if tab == 0 {
+                    if recents.isEmpty {
+                        placeholder("Os ícones que você usar aparecem aqui.")
+                    } else {
+                        IconStrip(items: Array(recents.prefix(8)), entryID: entry.id)
+                    }
+                } else if items.isEmpty && store.loadingSuggestions.contains(entry.id) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Buscando sugestões…").font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(height: 48)
+                } else if items.isEmpty {
+                    placeholder("Nenhuma sugestão encontrada para este app.")
+                } else {
+                    IconStrip(items: items, entryID: entry.id)
                 }
-                .frame(height: 40)
-            } else if !items.isEmpty {
-                IconStrip(title: "Sugestões", items: items, entryID: entry.id)
             }
-            if !recents.isEmpty {
-                IconStrip(title: "Recentes", items: recents, entryID: entry.id)
-            }
+            .transition(.opacity)
         }
-        .animation(.easeOut(duration: 0.25), value: items.count)
+        .animation(.easeOut(duration: 0.2), value: tab)
         .task(id: entry.id) { await store.loadSuggestions(for: entry.id) }
+    }
+
+    private func placeholder(_ text: String) -> some View {
+        Text(text).font(.caption).foregroundStyle(.secondary).frame(height: 48)
     }
 }
 
 private struct IconStrip: View {
     @EnvironmentObject private var store: LibraryStore
-    let title: String
     let items: [IconSuggestions.Suggestion]
     let entryID: AppEntry.ID
     @State private var hovered: String?
 
     var body: some View {
         VStack(spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(items) { item in

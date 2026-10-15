@@ -27,16 +27,44 @@ enum IconSuggestions {
     }
 
     static func search(for entry: AppEntry) async -> [Suggestion] {
-        var results: [Suggestion] = []
+        // 1) O próprio app na Mac App Store, pelo identificador exato.
+        var exact: [Suggestion] = []
         if let id = entry.bundleIdentifier {
-            results += await query("https://itunes.apple.com/lookup?bundleId=\(encode(id))&entity=macSoftware", isMac: true)
+            exact = await query("https://itunes.apple.com/lookup?bundleId=\(encode(id))&entity=macSoftware", isMac: true)
         }
-        let term = encode(entry.originalName)
-        results += await query("https://itunes.apple.com/search?term=\(term)&entity=macSoftware&limit=6", isMac: true)
-        results += await WhiteSur.suggestions(for: entry)
-        results += await query("https://itunes.apple.com/search?term=\(term)&entity=software&limit=6", isMac: false)
+        // 2) Buscas por nome, mas só ficam resultados que tenham o nome do app de verdade.
+        let key = keyword(for: entry)
+        let term = encode(cleanName(entry.originalName))
+        var byName = await WhiteSur.suggestions(for: entry)
+        byName += await query("https://itunes.apple.com/search?term=\(term)&entity=macSoftware&limit=15", isMac: true)
+        byName += await query("https://itunes.apple.com/search?term=\(term)&entity=software&limit=15", isMac: false)
+        let relevant = byName.filter { suggestion in
+            guard let key else { return false }
+            return normalize(suggestion.name).contains(key)
+        }
         var seen = Set<URL>()
-        return results.filter { seen.insert($0.url).inserted }.prefix(14).map { $0 }
+        return (exact + relevant).filter { seen.insert($0.url).inserted }.prefix(5).map { $0 }
+    }
+
+    /// "Adobe Photoshop 2026" → "Adobe Photoshop".
+    private static func cleanName(_ name: String) -> String {
+        name.replacingOccurrences(of: #"\s*(19|20)\d\d\b"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+v?\d+(\.\d+)*$"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func normalize(_ s: String) -> String {
+        s.lowercased().folding(options: .diacriticInsensitive, locale: nil)
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: "", options: .regularExpression)
+    }
+
+    /// A palavra que identifica o app (ignora marcas genéricas): "Adobe Photoshop 2026" → "photoshop".
+    private static func keyword(for entry: AppEntry) -> String? {
+        let generic: Set<String> = ["adobe", "microsoft", "google", "apple", "the", "app", "for", "mac", "macos", "pro", "studio", "and"]
+        let words = cleanName(entry.originalName).lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        let candidates = words.filter { !generic.contains($0) && $0.count >= 3 }
+        return (candidates.max(by: { $0.count < $1.count }) ?? words.first).map(normalize)
     }
 
     private static func encode(_ s: String) -> String {
@@ -54,6 +82,7 @@ enum IconSuggestions {
                   let big = URL(string: art.replacingOccurrences(of: "512x512bb", with: "1024x1024bb")
                                         .replacingOccurrences(of: "100x100bb", with: "1024x1024bb")) else { return nil }
             let name = item["trackName"] as? String ?? ""
+            // A WhiteSur entra com o nome do arquivo ("WhiteSur: photoshop").
             return Suggestion(id: big.absoluteString, name: name, url: big, source: isMac ? .appStoreMac : .appStoreiOS)
         }
     }
