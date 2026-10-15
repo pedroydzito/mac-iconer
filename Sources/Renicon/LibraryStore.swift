@@ -483,7 +483,6 @@ final class LibraryStore: ObservableObject {
         let style: IconStyle
         switch suggestion.source {
         case .appStoreiOS: style = .macOS
-        case .recent: style = .original
         default: style = IconRenderer.suggestedStyle(for: image)
         }
         setCustomIcon(image, for: id, style: style)
