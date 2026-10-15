@@ -21,7 +21,11 @@ final class Updater: ObservableObject {
         case failed(String)
     }
 
-    @Published var available: Release?
+    @Published var available: Release? {
+        didSet { if let available { pending = available } }
+    }
+    /// Versão nova encontrada (fica visível mesmo se a janela de aviso for fechada).
+    @Published var pending: Release?
     @Published var phase: Phase = .idle
     @Published var lastCheck: Date? = UserDefaults.standard.object(forKey: "lastUpdateCheck") as? Date
 
@@ -59,12 +63,20 @@ final class Updater: ObservableObject {
         do {
             var request = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repository)/releases/latest")!)
             request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            request.setValue("Iconer/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
+            request.timeoutInterval = 20
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let (data, response) = try await URLSession.shared.data(for: request)
-            if (response as? HTTPURLResponse)?.statusCode == 404 {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if status == 404 {
                 phase = .upToDate
                 return
             }
+            guard status == 200 else {
+                throw NSError(domain: "Iconer", code: status, userInfo: [NSLocalizedDescriptionKey:
+                    status == 403 ? "O GitHub limitou as verificações por agora. Tente mais tarde." : "O GitHub respondeu com o código \(status)."])
+            }
+            lastError = nil
             let json = try JSONDecoder().decode(GitHubRelease.self, from: data)
             lastCheck = Date()
             UserDefaults.standard.set(lastCheck, forKey: "lastUpdateCheck")
@@ -83,13 +95,25 @@ final class Updater: ObservableObject {
             available = Release(version: version, notes: json.body ?? "",
                                 downloadURL: asset.browser_download_url, pageURL: json.html_url)
         } catch {
+            lastError = error.localizedDescription
             phase = userInitiated ? .failed("Não foi possível verificar: \(error.localizedDescription)") : .idle
         }
+    }
+
+    /// Erro da última verificação automática (aparece nos Ajustes).
+    @Published var lastError: String?
+
+    /// Verifica de novo ao voltar para o Iconer, no máximo uma vez por hora.
+    func checkIfStale() {
+        guard autoCheck, available == nil, phase != .checking else { return }
+        if let lastCheck, Date().timeIntervalSince(lastCheck) < 3600 { return }
+        Task { await check(userInitiated: false) }
     }
 
     func skip(_ release: Release) {
         skippedVersion = release.version
         available = nil
+        pending = nil
     }
 
     /// Baixa o .zip, substitui o app atual e reabre.

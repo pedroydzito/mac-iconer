@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var store: LibraryStore
+    @EnvironmentObject private var updater: Updater
     @Environment(\.undoManager) private var undoManager
     @State private var dropTargeted = false
     @State private var showInfo = false
@@ -48,6 +49,18 @@ struct ContentView: View {
                         }
                         .keyboardShortcut(.cancelAction)
                         .help("Voltar ao início (Esc)")
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                if let release = updater.pending {
+                    Button {
+                        updater.available = release
+                    } label: {
+                        Label("Atualizar para \(release.version)", systemImage: "arrow.down.circle.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .tint(.green)
+                    .help("Uma versão nova do Iconer está disponível")
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -144,6 +157,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refreshAfterActivation()
+            updater.checkIfStale()
         }
         .onAppear { store.undoManager = undoManager }
         .onChange(of: undoManager) { _, manager in store.undoManager = manager }

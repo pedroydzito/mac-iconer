@@ -63,7 +63,10 @@ struct SettingsView: View {
                         case .checking: ProgressView().controlSize(.small)
                         case .upToDate: Text("Você está na versão mais recente.").foregroundStyle(.secondary)
                         case .failed(let message): Text(message).foregroundStyle(.red).lineLimit(2)
-                        default: EmptyView()
+                        default:
+                            if let error = updater.lastError {
+                                Text("Última verificação falhou: \(error)").foregroundStyle(.orange).lineLimit(2)
+                            }
                         }
                         Button("Procurar Agora") { Task { await updater.check(userInitiated: true) } }
                             .disabled(updater.phase == .checking)
