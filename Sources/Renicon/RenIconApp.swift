@@ -62,6 +62,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         offerMoveToApplications()
     }
 
+    /// O app se chamava Renicon: renomeia o próprio pacote para Iconer.app e reabre.
+    private func renameLegacyBundleIfNeeded() {
+        let current = Bundle.main.bundleURL
+        guard current.lastPathComponent == "Renicon.app", !current.path.contains("/AppTranslocation/") else { return }
+        let target = current.deletingLastPathComponent().appendingPathComponent("Iconer.app")
+        guard !FileManager.default.fileExists(atPath: target.path),
+              (try? FileManager.default.moveItem(at: current, to: target)) != nil else { return }
+        DockManager.replace(path: current.path, with: target.path, label: "Iconer")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", target.path]
+        try? process.run()
+        exit(0)
+    }
+
     /// Se o Iconer foi aberto do DMG ou de Downloads, oferece movê-lo para Aplicativos
     /// (necessário para as atualizações automáticas funcionarem).
     private func offerMoveToApplications() {
