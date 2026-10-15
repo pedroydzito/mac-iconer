@@ -65,6 +65,11 @@ final class LibraryStore: ObservableObject {
                 self.showToast("Apps originais voltaram ao nome de sempre")
             }
         }
+        if !defaults.bool(forKey: "cleanedDuplicateShortcuts") {
+            let paths = entries.compactMap(\.shortcutPath)
+            Task.detached { ShortcutBuilder.cleanUpDuplicateRegistrations(paths) }
+            defaults.set(true, forKey: "cleanedDuplicateShortcuts")
+        }
         if !defaults.bool(forKey: "migratedCompiledLauncher") {
             // Atalhos antigos usavam um script como executável e não apareciam no Spotlight.
             for i in entries.indices where entries[i].lastApplied != nil {

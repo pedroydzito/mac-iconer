@@ -30,20 +30,19 @@ enum ShortcutBuilder {
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let app = shortcutURL(for: entry)
-        // Remove a versão anterior (inclusive se o nome mudou).
+        // Nunca mexe num app de verdade que tenha o mesmo nome.
+        if fm.fileExists(atPath: app.path), !isOurShortcut(app) {
+            throw NSError(domain: "Renicon", code: 5, userInfo: [NSLocalizedDescriptionKey:
+                "Já existe um app chamado “\(entry.displayName)” em \(folder.path). Escolha outro nome."])
+        }
+        // O atalho é atualizado no lugar (apagar e recriar deixava registros duplicados
+        // no Spotlight). Se o nome mudou, o atalho existente é renomeado.
         var renamedFrom: String?
         if let old = entry.shortcutPath, old != app.path, fm.fileExists(atPath: old) {
-            try? Shell.run(lsregister, ["-u", old])
-            try fm.removeItem(atPath: old)
+            _ = try? Shell.run(lsregister, ["-u", old])
+            if fm.fileExists(atPath: app.path) { try fm.removeItem(at: app) }
+            try fm.moveItem(atPath: old, toPath: app.path)
             renamedFrom = old
-        }
-        if fm.fileExists(atPath: app.path) {
-            // Nunca apaga um app de verdade que tenha o mesmo nome.
-            guard isOurShortcut(app) else {
-                throw NSError(domain: "Renicon", code: 5, userInfo: [NSLocalizedDescriptionKey:
-                    "Já existe um app chamado “\(entry.displayName)” em \(folder.path). Escolha outro nome."])
-            }
-            try fm.removeItem(at: app)
         }
 
         let contents = app.appendingPathComponent("Contents")
@@ -78,6 +77,7 @@ enum ShortcutBuilder {
         // Executável compilado (o macOS só lista no Spotlight/Launchpad apps com executável
         // de verdade). Em builds de desenvolvimento sem ele, usa um script como reserva.
         let launcher = macOS.appendingPathComponent("launcher")
+        if fm.fileExists(atPath: launcher.path) { try fm.removeItem(at: launcher) }
         if let compiled = Bundle.main.url(forResource: "RenLauncher", withExtension: nil) {
             try fm.copyItem(at: compiled, to: launcher)
         } else {
@@ -92,7 +92,7 @@ enum ShortcutBuilder {
 
         // Assinatura ad-hoc, registro no LaunchServices e indexação no Spotlight.
         try? Shell.run("/usr/bin/codesign", ["--force", "--deep", "-s", "-", app.path])
-        _ = try? Shell.run(lsregister, ["-f", "-R", "-trusted", app.path])
+        _ = try? Shell.run(lsregister, ["-f", "-trusted", app.path])
         _ = try? Shell.run("/usr/bin/mdimport", ["-i", app.path])
         _ = try? Shell.run("/usr/bin/touch", [app.path])
         NSWorkspace.shared.noteFileSystemChanged(app.path)
@@ -100,6 +100,17 @@ enum ShortcutBuilder {
             DockManager.replace(path: renamedFrom, with: app.path, label: entry.displayName)
         }
         return app
+    }
+
+    /// Limpa registros repetidos de atalhos no LaunchServices/Spotlight (versões antigas
+    /// recriavam o atalho a cada mudança).
+    static func cleanUpDuplicateRegistrations(_ paths: [String]) {
+        for path in paths where FileManager.default.fileExists(atPath: path) {
+            _ = try? Shell.run(lsregister, ["-u", path])
+            _ = try? Shell.run(lsregister, ["-f", "-trusted", path])
+            _ = try? Shell.run("/usr/bin/mdimport", ["-i", path])
+        }
+        _ = try? Shell.run(lsregister, ["-gc"])
     }
 
     static func remove(_ entry: AppEntry) {
