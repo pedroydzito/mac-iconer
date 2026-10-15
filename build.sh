@@ -1,5 +1,5 @@
 #!/bin/sh
-# Compila o Renicon e monta Renicon.app (e Renicon.zip / Renicon.dmg) em ./build
+# Compila o Iconer e monta Iconer.app (e Iconer.zip / Iconer.dmg) em ./build
 # Uso: ./build.sh [versão]   ex.: ./build.sh 1.2.0
 set -e
 cd "$(dirname "$0")"
@@ -8,10 +8,10 @@ VERSION="${1:-1.0.0}"
 swift build -c release --arch arm64 --arch x86_64
 BIN="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)/Renicon"
 
-APP="build/Renicon.app"
+APP="build/Iconer.app"
 rm -rf build
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Renicon"
+cp "$BIN" "$APP/Contents/MacOS/Iconer"
 cp "$(dirname "$BIN")/RenLauncher" "$APP/Contents/Resources/RenLauncher"
 cp "$(dirname "$BIN")/RenDockHelper" "$APP/Contents/Resources/RenDockHelper"
 sed -e "s/__VERSION__/$VERSION/g" -e "s/__BUILD__/$(date +%Y%m%d%H%M)/g" Resources/Info.plist > "$APP/Contents/Info.plist"
@@ -29,12 +29,12 @@ rm -rf "$ICONSET"
 codesign --force --deep -s - "$APP"
 
 # Pacotes para distribuição
-ditto -c -k --keepParent "$APP" build/Renicon.zip
+ditto -c -k --keepParent "$APP" build/Iconer.zip
 DMG_DIR="build/dmg"
 mkdir -p "$DMG_DIR"
 cp -R "$APP" "$DMG_DIR/"
 ln -s /Applications "$DMG_DIR/Applications"
-hdiutil create -volname "Renicon" -srcfolder "$DMG_DIR" -ov -format UDZO build/Renicon.dmg >/dev/null
+hdiutil create -volname "Iconer" -srcfolder "$DMG_DIR" -ov -format UDZO build/Iconer.dmg >/dev/null
 rm -rf "$DMG_DIR"
 
-echo "Pronto: $APP (versão $VERSION), build/Renicon.zip e build/Renicon.dmg"
+echo "Pronto: $APP (versão $VERSION), build/Iconer.zip e build/Iconer.dmg"

@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>pt-BR</string>
-    <key>CFBundleExecutable</key><string>Renicon</string>
+    <key>CFBundleExecutable</key><string>Iconer</string>
     <key>CFBundleIdentifier</key><string>com.renicon.app</string>
-    <key>CFBundleName</key><string>Renicon</string>
-    <key>CFBundleDisplayName</key><string>Renicon</string>
+    <key>CFBundleName</key><string>Iconer</string>
+    <key>CFBundleDisplayName</key><string>Iconer</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>__VERSION__</string>
     <key>CFBundleVersion</key><string>__BUILD__</string>

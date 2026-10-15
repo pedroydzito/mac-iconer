@@ -65,7 +65,7 @@ struct EditorView: View {
         .onDisappear { if entry.hasPendingChanges && entry.lastApplied != nil { applyNow() } }
         .onChange(of: entry.shortcutPath) { _, _ in inDock = store.isInDock(entry) }
         .onChange(of: entry.applyIconToOriginal) { _, _ in inDock = store.isInDock(entry) }
-        // Reconfere quando o usuário volta ao Renicon (pode ter mexido no Dock).
+        // Reconfere quando o usuário volta ao Iconer (pode ter mexido no Dock).
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             inDock = store.isInDock(entry)
         }
@@ -155,6 +155,7 @@ private struct IconDropZone: View {
     let entry: AppEntry
     @State private var hovering = false
     @State private var targeted = false
+    @State private var showMaker = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -203,6 +204,20 @@ private struct IconDropZone: View {
                 Text(entry.hasCustomIcon ? "Clique ou arraste outra imagem para trocar" : "Clique ou arraste uma imagem para o ícone")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                Button {
+                    showMaker = true
+                } label: {
+                    Image(systemName: "face.smiling")
+                }
+                .buttonStyle(.borderless)
+                .help("Criar um ícone com emoji ou letra")
+                .accessibilityLabel("Criar ícone com emoji ou letra")
+                .popover(isPresented: $showMaker, arrowEdge: .bottom) {
+                    IconMakerView { image in
+                        store.setCustomIcon(image, for: entry.id, style: .macOS)
+                        showMaker = false
+                    }
+                }
                 Menu {
                     iconMenu
                 } label: {
@@ -220,6 +235,7 @@ private struct IconDropZone: View {
     private var iconMenu: some View {
         Button("Escolher Imagem…") { store.chooseIcon(for: entry.id) }
         Button("Colar Imagem") { store.pasteIcon(for: entry.id) }
+        Button("Criar com Emoji ou Letra…") { showMaker = true }
         if entry.hasCustomIcon {
             Divider()
             Button("Usar Ícone Original") { store.resetIcon(for: entry.id) }
@@ -227,16 +243,16 @@ private struct IconDropZone: View {
     }
 }
 
-// MARK: - Sugestões da App Store
+// MARK: - Sugestões (App Store, WhiteSur) e recentes
 
 private struct SuggestionsRow: View {
     @EnvironmentObject private var store: LibraryStore
     let entry: AppEntry
-    @State private var hovered: String?
 
     var body: some View {
         let items = store.suggestions[entry.id] ?? []
-        Group {
+        let recents = store.recentIcons
+        VStack(spacing: 12) {
             if items.isEmpty && store.loadingSuggestions.contains(entry.id) {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
@@ -244,44 +260,120 @@ private struct SuggestionsRow: View {
                 }
                 .frame(height: 40)
             } else if !items.isEmpty {
-                VStack(spacing: 8) {
-                    Text("Sugestões da App Store")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(items) { item in
-                                Button {
-                                    Task { await store.useSuggestion(item, for: entry.id) }
-                                } label: {
-                                    AsyncImage(url: item.url) { image in
-                                        image.resizable().interpolation(.high)
-                                    } placeholder: {
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .fill(.white.opacity(0.08))
-                                    }
-                                    .frame(width: 40, height: 40)
-                                    .clipShape(RoundedRectangle(cornerRadius: item.isMac ? 0 : 9, style: .continuous))
-                                    .scaleEffect(hovered == item.id ? 1.15 : 1)
-                                    .animation(.spring(duration: 0.2), value: hovered)
-                                }
-                                .buttonStyle(.plain)
-                                .onHover { hovered = $0 ? item.id : (hovered == item.id ? nil : hovered) }
-                                .help(item.name)
-                                .accessibilityLabel("Usar o ícone de \(item.name)")
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                    }
-                    .frame(maxWidth: 520)
-                    .fixedSize(horizontal: items.count < 9, vertical: false)
-                }
-                .transition(.opacity)
+                IconStrip(title: "Sugestões", items: items, entryID: entry.id)
+            }
+            if !recents.isEmpty {
+                IconStrip(title: "Recentes", items: recents, entryID: entry.id)
             }
         }
         .animation(.easeOut(duration: 0.25), value: items.count)
         .task(id: entry.id) { await store.loadSuggestions(for: entry.id) }
+    }
+}
+
+private struct IconStrip: View {
+    @EnvironmentObject private var store: LibraryStore
+    let title: String
+    let items: [IconSuggestions.Suggestion]
+    let entryID: AppEntry.ID
+    @State private var hovered: String?
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(items) { item in
+                        Button {
+                            Task { await store.useSuggestion(item, for: entryID) }
+                        } label: {
+                            Thumbnail(url: item.url, rounded: !item.isMac)
+                                .frame(width: 40, height: 40)
+                                .scaleEffect(hovered == item.id ? 1.15 : 1)
+                                .animation(.spring(duration: 0.2), value: hovered)
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hovered = $0 ? item.id : (hovered == item.id ? nil : hovered) }
+                        .help("\(item.name) — \(item.source.label)")
+                        .accessibilityLabel("Usar ícone: \(item.name)")
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+            }
+            .frame(maxWidth: 560)
+            .fixedSize(horizontal: items.count < 10, vertical: false)
+        }
+        .transition(.opacity)
+    }
+}
+
+/// Miniatura que carrega PNG, ICNS ou SVG (local ou da internet).
+private struct Thumbnail: View {
+    let url: URL
+    let rounded: Bool
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: rounded ? 9 : 0, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(0.08))
+            }
+        }
+        .task(id: url) { image = await IconSuggestions.loadImage(url) }
+    }
+}
+
+// MARK: - Criar ícone com emoji ou letra
+
+private struct IconMakerView: View {
+    var onUse: (NSImage) -> Void
+    @State private var text = "😀"
+    @State private var color = Color(red: 0.39, green: 0.36, blue: 1)
+
+    private let palette: [Color] = [
+        Color(red: 0.39, green: 0.36, blue: 1), .blue, .teal, .green, .yellow, .orange, .red, .pink,
+        Color(white: 0.12), .white,
+    ]
+
+    private var preview: NSImage {
+        IconRenderer.styledImage(IconRenderer.makeIcon(text: text, background: NSColor(color)), style: .macOS, size: 256)
+    }
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(nsImage: preview)
+                .resizable().interpolation(.high)
+                .frame(width: 110, height: 110)
+            TextField("Emoji ou letra", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .multilineTextAlignment(.center)
+                .frame(width: 160)
+                .onChange(of: text) { _, value in if value.count > 2 { text = String(value.prefix(2)) } }
+            HStack(spacing: 6) {
+                ForEach(palette.indices, id: \.self) { i in
+                    Circle().fill(palette[i])
+                        .frame(width: 18, height: 18)
+                        .overlay(Circle().stroke(.white.opacity(0.4), lineWidth: 1))
+                        .onTapGesture { color = palette[i] }
+                }
+                ColorPicker("", selection: $color, supportsOpacity: false).labelsHidden()
+            }
+            HStack {
+                Button("Emojis…") { NSApp.orderFrontCharacterPalette(nil) }
+                Spacer()
+                Button("Usar Ícone") { onUse(IconRenderer.makeIcon(text: text, background: NSColor(color))) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(18)
+        .frame(width: 300)
     }
 }
 

@@ -99,7 +99,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Falta uma permissão para trocar o ícone do app original")
                             .font(.callout.weight(.semibold))
-                        Text("Ligue o Renicon em Gerenciamento de Apps. O atalho já foi criado.")
+                        Text("Ligue o Iconer em Gerenciamento de Apps. O atalho já foi criado.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Button("Abrir Ajustes") { store.openAppManagementSettings() }
@@ -281,7 +281,7 @@ struct AppShelf: View {
                 NSWorkspace.shared.activateFileViewerSelecting([entry.originalURL])
             }
             Divider()
-            Button("Remover do Renicon…", role: .destructive) { pendingRemoval = entry }
+            Button("Remover do Iconer…", role: .destructive) { pendingRemoval = entry }
         }
         .confirmationDialog(
             "Remover “\(pendingRemoval?.displayName ?? "")”?",

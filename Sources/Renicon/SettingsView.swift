@@ -26,11 +26,11 @@ struct SettingsView: View {
                     Button("Recarregar Dock") { store.reloadDock() }
                 }
                 LabeledContent("Desinstalar") {
-                    Button("Desinstalar o Renicon…", role: .destructive) { confirmUninstall = true }
-                        .confirmationDialog("Desinstalar o Renicon?", isPresented: $confirmUninstall) {
+                    Button("Desinstalar o Iconer…", role: .destructive) { confirmUninstall = true }
+                        .confirmationDialog("Desinstalar o Iconer?", isPresented: $confirmUninstall) {
                             Button("Desinstalar", role: .destructive) { store.uninstall() }
                         } message: {
-                            Text("Remove todos os atalhos, devolve os ícones e o Dock ao normal, apaga os dados do Renicon e move o app para o Lixo.")
+                            Text("Remove todos os atalhos, devolve os ícones e o Dock ao normal, apaga os dados do Iconer e move o app para o Lixo.")
                         }
                 }
                 LabeledContent("Desfazer tudo") {
@@ -39,13 +39,13 @@ struct SettingsView: View {
                         .confirmationDialog("Remover todos os atalhos?", isPresented: $confirmReset) {
                             Button("Remover Tudo", role: .destructive) { store.removeAll() }
                         } message: {
-                            Text("Apaga todos os atalhos criados pelo Renicon e devolve os ícones originais dos apps. Use antes de desinstalar o Renicon.")
+                            Text("Apaga todos os atalhos criados pelo Iconer e devolve os ícones originais dos apps. Use antes de desinstalar o Iconer.")
                         }
                 }
             } header: {
                 Text("Atalhos")
             } footer: {
-                Text("O Renicon não precisa ficar aberto. Um ajudante invisível, que só acorda quando um app abre ou fecha, troca o atalho pelo app no Dock (e de volta), na mesma posição. Se uma atualização apagar o ícone de um app, o macOS chama um pequeno script que o recoloca.")
+                Text("O Iconer não precisa ficar aberto. Um ajudante invisível, que só acorda quando um app abre ou fecha, troca o atalho pelo app no Dock (e de volta), na mesma posição. Se uma atualização apagar o ícone de um app, o macOS chama um pequeno script que o recoloca.")
                     .foregroundStyle(.secondary)
             }
 
@@ -76,7 +76,7 @@ struct SettingsView: View {
                     }
                 }
             } header: {
-                Text("Atualizações do Renicon")
+                Text("Atualizações do Iconer")
             }
         }
         .formStyle(.grouped)

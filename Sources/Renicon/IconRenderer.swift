@@ -87,3 +87,33 @@ enum IconRenderer {
         try Shell.run("/usr/bin/iconutil", ["-c", "icns", iconset.path, "-o", destination.path])
     }
 }
+
+extension IconRenderer {
+    /// Cria um ícone com um emoji ou letra(s) sobre uma cor (o formato macOS é aplicado depois).
+    static func makeIcon(text: String, background: NSColor) -> NSImage {
+        let size: CGFloat = 1024
+        let image = NSImage(size: NSSize(width: size, height: size))
+        image.lockFocus()
+        background.setFill()
+        NSRect(x: 0, y: 0, width: size, height: size).fill()
+
+        let trimmed = String(text.trimmingCharacters(in: .whitespaces).prefix(2))
+        let isEmoji = trimmed.unicodeScalars.contains { $0.properties.isEmojiPresentation }
+        let rgb = background.usingColorSpace(.sRGB) ?? .white
+        let luminance = 0.299 * rgb.redComponent + 0.587 * rgb.greenComponent + 0.114 * rgb.blueComponent
+        let fontSize: CGFloat = isEmoji ? 600 : (trimmed.count > 1 ? 440 : 600)
+        var font = NSFont.systemFont(ofSize: fontSize, weight: .bold)
+        if !isEmoji, let rounded = font.fontDescriptor.withDesign(.rounded) {
+            font = NSFont(descriptor: rounded, size: fontSize) ?? font
+        }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: luminance > 0.6 ? NSColor.black.withAlphaComponent(0.85) : NSColor.white,
+        ]
+        let string = NSAttributedString(string: isEmoji ? trimmed : trimmed.uppercased(), attributes: attributes)
+        let bounds = string.boundingRect(with: NSSize(width: size, height: size), options: [.usesLineFragmentOrigin])
+        string.draw(at: NSPoint(x: (size - bounds.width) / 2 - bounds.minX, y: (size - bounds.height) / 2 - bounds.minY))
+        image.unlockFocus()
+        return image
+    }
+}

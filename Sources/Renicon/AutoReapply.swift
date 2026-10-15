@@ -1,7 +1,7 @@
 import RenCore
 import AppKit
 
-/// Mantém o ícone personalizado no app original *sem o Renicon estar aberto*.
+/// Mantém o ícone personalizado no app original *sem o Iconer estar aberto*.
 ///
 /// - Um script JXA (`reapply.js`) recoloca o ícone quando ele some (após uma atualização).
 /// - Uma regra do launchd (WatchPaths) chama esse script só quando a pasta do app muda;

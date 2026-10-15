@@ -2,7 +2,7 @@ import RenCore
 import AppKit
 import SwiftUI
 
-/// Verifica as Releases do GitHub e instala novas versões do próprio Renicon.
+/// Verifica as Releases do GitHub e instala novas versões do próprio Iconer.
 @MainActor
 final class Updater: ObservableObject {
     static let repository = "pedroydzito/mac-renicon"
@@ -107,7 +107,7 @@ final class Updater: ObservableObject {
             let current = Bundle.main.bundleURL
             if current.path.contains("/AppTranslocation/") || current.path.hasPrefix("/Volumes/") {
                 throw NSError(domain: "Renicon", code: 4, userInfo: [NSLocalizedDescriptionKey:
-                    "Mova o Renicon para a pasta Aplicativos antes de atualizar."])
+                    "Mova o Iconer para a pasta Aplicativos antes de atualizar."])
             }
             try await Task.detached {
                 try Shell.run("/usr/bin/ditto", ["-x", "-k", zip.path, work.path])
@@ -122,13 +122,15 @@ final class Updater: ObservableObject {
                 throw NSError(domain: "Renicon", code: 3, userInfo: [NSLocalizedDescriptionKey: "Sem permissão para substituir o app em \(current.deletingLastPathComponent().path)."])
             }
 
-            // Script que espera o Renicon fechar, troca o app e abre a nova versão.
+            // Script que espera o Iconer fechar, troca o app e abre a nova versão.
             let script = """
             #!/bin/sh
             while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.3; done
             rm -rf "$2"
             /usr/bin/ditto "$1" "$2"
             /usr/bin/xattr -dr com.apple.quarantine "$2" 2>/dev/null
+            # O app mudou de nome (ex.: Renicon.app → Iconer.app): remove o antigo.
+            if [ "$4" != "$2" ]; then rm -rf "$4"; fi
             /usr/bin/open "$2"
             rm -rf "$3"
             """
@@ -136,7 +138,11 @@ final class Updater: ObservableObject {
             try script.write(to: scriptURL, atomically: true, encoding: .utf8)
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = [scriptURL.path, newApp.path, current.path, work.path]
+            let destination = current.deletingLastPathComponent().appendingPathComponent(newApp.lastPathComponent)
+            if destination.path != current.path {
+                DockManager.replace(path: current.path, with: destination.path, label: "Iconer")
+            }
+            process.arguments = [scriptURL.path, newApp.path, destination.path, work.path, current.path]
             try process.run()
             relaunch()
         } catch {
@@ -144,7 +150,7 @@ final class Updater: ObservableObject {
         }
     }
 
-    /// Fecha o Renicon para o instalador trocar o app. Fecha a janela de atualização
+    /// Fecha o Iconer para o instalador trocar o app. Fecha a janela de atualização
     /// antes (com ela aberta o macOS pode ignorar o pedido) e, se ainda assim o app
     /// não fechar, encerra o processo.
     private func relaunch() {
@@ -188,9 +194,9 @@ struct UpdateSheet: View {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable().frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Uma nova versão do Renicon está disponível!")
+                    Text("Uma nova versão do Iconer está disponível!")
                         .font(.headline)
-                    Text("O Renicon \(release.version) está disponível — você tem a versão \(Updater.currentVersion). Deseja atualizar agora?")
+                    Text("O Iconer \(release.version) está disponível — você tem a versão \(Updater.currentVersion). Deseja atualizar agora?")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

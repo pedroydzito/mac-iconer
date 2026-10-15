@@ -84,7 +84,7 @@ final class LibraryStore: ObservableObject {
     private func removeOrphanIcons() {
         let ids = Set(entries.filter(\.hasCustomIcon).map(\.id.uuidString))
         let files = (try? fm.contentsOfDirectory(at: iconsURL, includingPropertiesForKeys: nil)) ?? []
-        for file in files where !ids.contains(String(file.deletingPathExtension().lastPathComponent.prefix(36))) {
+        for file in files where !file.hasDirectoryPath && !ids.contains(String(file.deletingPathExtension().lastPathComponent.prefix(36))) {
             try? fm.removeItem(at: file)
         }
     }
@@ -187,7 +187,7 @@ final class LibraryStore: ObservableObject {
         selection = entries[(index + step + entries.count) % entries.count].id
     }
 
-    /// Ao voltar para o Renicon: relê os ícones originais (um app pode ter sido atualizado).
+    /// Ao voltar para o Iconer: relê os ícones originais (um app pode ter sido atualizado).
     func refreshAfterActivation() {
         originalIconCache.removeAll()
         objectWillChange.send()
@@ -286,6 +286,7 @@ final class LibraryStore: ObservableObject {
             entries[i].iconStyle = style ?? IconRenderer.suggestedStyle(for: image)
             entries[i].hasPendingChanges = true
             registerUndo(id: id, restoring: before, iconData: iconBefore, actionName: "Trocar Ícone")
+            saveRecent(data)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -350,7 +351,7 @@ final class LibraryStore: ObservableObject {
         let panel = NSOpenPanel()
         panel.title = "Escolha uma imagem para o ícone"
         panel.prompt = "Usar imagem"
-        panel.allowedContentTypes = [.image, .icns, .application]
+        panel.allowedContentTypes = [.image, .icns, .svg, .application]
         if panel.runModal() == .OK, let url = panel.url { setCustomIcon(from: url, for: id) }
     }
 
@@ -378,7 +379,7 @@ final class LibraryStore: ObservableObject {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return false }
         var entry = entries[i]
         if let other = duplicate(of: entry) {
-            errorMessage = "Já existe um app chamado “\(other.displayName)” no Renicon. Escolha outro nome."
+            errorMessage = "Já existe um app chamado “\(other.displayName)” no Iconer. Escolha outro nome."
             return false
         }
         busy = true
@@ -431,6 +432,34 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    // MARK: - Ícones recentes
+
+    private var recentURL: URL { iconsURL.appendingPathComponent("Recent", isDirectory: true) }
+
+    /// Guarda uma cópia do ícone escolhido para reaproveitar em outros apps (até 12).
+    private func saveRecent(_ data: Data) {
+        try? fm.createDirectory(at: recentURL, withIntermediateDirectories: true)
+        let files = recentFiles()
+        if files.contains(where: { (try? Data(contentsOf: $0)) == data }) { return }
+        try? data.write(to: recentURL.appendingPathComponent("\(Int(Date().timeIntervalSince1970 * 1000)).png"))
+        for old in recentFiles().dropFirst(12) { try? fm.removeItem(at: old) }
+        objectWillChange.send()
+    }
+
+    private func recentFiles() -> [URL] {
+        let files = (try? fm.contentsOfDirectory(at: recentURL, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        return files.filter { $0.pathExtension == "png" }.sorted { $0.lastPathComponent > $1.lastPathComponent }
+    }
+
+    var recentIcons: [IconSuggestions.Suggestion] {
+        recentFiles().map { IconSuggestions.Suggestion(id: $0.path, name: "Usado recentemente", url: $0, source: .recent) }
+    }
+
+    func clearRecents() {
+        try? fm.removeItem(at: recentURL)
+        objectWillChange.send()
+    }
+
     // MARK: - Sugestões de ícone
 
     @Published var suggestions: [AppEntry.ID: [IconSuggestions.Suggestion]] = [:]
@@ -448,7 +477,13 @@ final class LibraryStore: ObservableObject {
             errorMessage = "Não foi possível baixar esse ícone."
             return
         }
-        setCustomIcon(image, for: id, style: suggestion.isMac ? IconRenderer.suggestedStyle(for: image) : .macOS)
+        let style: IconStyle
+        switch suggestion.source {
+        case .appStoreiOS: style = .macOS
+        case .recent: style = .original
+        default: style = IconRenderer.suggestedStyle(for: image)
+        }
+        setCustomIcon(image, for: id, style: style)
     }
 
     /// Versões 1.6–1.8 podiam renomear o arquivo do app original. Isso confunde instaladores
@@ -510,7 +545,7 @@ final class LibraryStore: ObservableObject {
             && bundle.object(forInfoDictionaryKey: "CFBundleIconFile") == nil
     }
 
-    /// Desfaz tudo (atalhos, ícones, Dock, ajudante) e move o Renicon para o Lixo.
+    /// Desfaz tudo (atalhos, ícones, Dock, ajudante) e move o Iconer para o Lixo.
     func uninstall() {
         removeAll()
         DockHelperInstaller.uninstall()
@@ -573,7 +608,7 @@ final class LibraryStore: ObservableObject {
             refreshIcon(at: url)
         } else {
             throw NSError(domain: "Renicon", code: 1, userInfo: [NSLocalizedDescriptionKey:
-                "Sem permissão para alterar o ícone de \(entry.originalName). O atalho foi criado normalmente; dê ao Renicon “Acesso Total ao Disco” ou “Gerenciamento de Apps” em Ajustes do Sistema > Privacidade e Segurança."])
+                "Sem permissão para alterar o ícone de \(entry.originalName). O atalho foi criado normalmente; dê ao Iconer “Acesso Total ao Disco” ou “Gerenciamento de Apps” em Ajustes do Sistema > Privacidade e Segurança."])
         }
     }
 
@@ -625,7 +660,7 @@ final class LibraryStore: ObservableObject {
         iconsURL.appendingPathComponent("\(entry.id.uuidString)-styled.png")
     }
 
-    /// Prepara o script e a regra do launchd que mantêm os ícones sem o Renicon aberto.
+    /// Prepara o script e a regra do launchd que mantêm os ícones sem o Iconer aberto.
     func updateAutoReapply() {
         var items: [AutoReapply.Item] = []
         for entry in entries where entry.applyIconToOriginal && entry.lastApplied != nil {

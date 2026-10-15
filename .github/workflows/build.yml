@@ -41,21 +41,21 @@ jobs:
       - name: Guardar artefatos
         uses: actions/upload-artifact@v4
         with:
-          name: Renicon
+          name: Iconer
           path: |
-            build/Renicon.dmg
-            build/Renicon.zip
+            build/Iconer.dmg
+            build/Iconer.zip
 
       - name: Publicar release
         if: env.PUBLISH == '1'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
-          name: Renicon ${{ env.VERSION }}
+          name: Iconer ${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           make_latest: true
           files: |
-            build/Renicon.dmg
-            build/Renicon.zip
+            build/Iconer.dmg
+            build/Iconer.zip
           body: ${{ inputs.notes }}
           generate_release_notes: ${{ inputs.notes == '' }}

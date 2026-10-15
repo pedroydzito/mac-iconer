@@ -1,6 +1,6 @@
 import AppKit
 
-// Executável dos atalhos criados pelo Renicon. Lê o app original no próprio Info.plist,
+// Executável dos atalhos criados pelo Iconer. Lê o app original no próprio Info.plist,
 // recoloca o ícone personalizado se uma atualização o apagou e abre o app original
 // (repassando arquivos soltos sobre o atalho). Não fica rodando: encerra logo em seguida.
 
@@ -44,7 +44,7 @@ final class Launcher: NSObject, NSApplicationDelegate {
         guard let app = originalURL() else {
             let alert = NSAlert()
             alert.messageText = "O app original não foi encontrado"
-            alert.informativeText = "Abra o Renicon para verificar este atalho."
+            alert.informativeText = "Abra o Iconer para verificar este atalho."
             alert.alertStyle = .warning
             NSApp.setActivationPolicy(.accessory)
             NSApp.activate(ignoringOtherApps: true)

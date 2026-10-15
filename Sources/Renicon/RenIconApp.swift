@@ -9,7 +9,7 @@ struct RenIconApp: App {
     @StateObject private var updater = Updater()
 
     var body: some Scene {
-        Window("Renicon", id: "main") {
+        Window("Iconer", id: "main") {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(updater)
@@ -52,16 +52,17 @@ struct RenIconApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    // O Renicon não precisa ficar aberto: fechou a janela, o app fecha.
+    // O Iconer não precisa ficar aberto: fechou a janela, o app fecha.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Versões antigas podiam se registrar para abrir no login; desfaz isso.
         try? SMAppServiceBridge.unregisterIfNeeded()
+        renameLegacyBundleIfNeeded()
         offerMoveToApplications()
     }
 
-    /// Se o Renicon foi aberto do DMG ou de Downloads, oferece movê-lo para Aplicativos
+    /// Se o Iconer foi aberto do DMG ou de Downloads, oferece movê-lo para Aplicativos
     /// (necessário para as atualizações automáticas funcionarem).
     private func offerMoveToApplications() {
         let path = Bundle.main.bundlePath
@@ -70,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               !path.contains("/.build/"), !UserDefaults.standard.bool(forKey: "dontOfferMove") else { return }
 
         let alert = NSAlert()
-        alert.messageText = "Mover o Renicon para a pasta Aplicativos?"
+        alert.messageText = "Mover o Iconer para a pasta Aplicativos?"
         alert.informativeText = "Assim ele fica junto dos outros apps e consegue se atualizar sozinho."
         alert.addButton(withTitle: "Mover para Aplicativos")
         alert.addButton(withTitle: "Agora Não")
@@ -80,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if alert.suppressionButton?.state == .on { UserDefaults.standard.set(true, forKey: "dontOfferMove") }
         guard response == .alertFirstButtonReturn else { return }
 
-        let destination = "/Applications/Renicon.app"
+        let destination = "/Applications/Iconer.app"
         do {
             if FileManager.default.fileExists(atPath: destination) {
                 try FileManager.default.trashItem(at: URL(fileURLWithPath: destination), resultingItemURL: nil)
@@ -94,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             exit(0)
         } catch {
             let failure = NSAlert(error: error)
-            failure.messageText = "Não foi possível mover o Renicon. Arraste-o manualmente para a pasta Aplicativos."
+            failure.messageText = "Não foi possível mover o Iconer. Arraste-o manualmente para a pasta Aplicativos."
             failure.runModal()
         }
     }

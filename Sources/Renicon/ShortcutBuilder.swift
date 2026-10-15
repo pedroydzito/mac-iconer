@@ -128,17 +128,17 @@ enum ShortcutBuilder {
         if let bundleID = entry.bundleIdentifier, !bundleID.isEmpty {
             return """
             #!/bin/sh
-            # Gerado pelo Renicon. Abre o app pelo identificador; se falhar, usa o caminho.
+            # Gerado pelo Iconer. Abre o app pelo identificador; se falhar, usa o caminho.
             /usr/bin/open -b \(shellQuote(bundleID)) "$@" 2>/dev/null || /usr/bin/open -a \(path) "$@" 2>/dev/null || \
-              /usr/bin/osascript -e 'display alert "O app original não foi encontrado" message "Abra o Renicon para verificar este atalho." as warning'
+              /usr/bin/osascript -e 'display alert "O app original não foi encontrado" message "Abra o Iconer para verificar este atalho." as warning'
 
             """
         }
         return """
         #!/bin/sh
-        # Gerado pelo Renicon.
+        # Gerado pelo Iconer.
         /usr/bin/open -a \(path) "$@" 2>/dev/null || \
-          /usr/bin/osascript -e 'display alert "O app original não foi encontrado" message "Abra o Renicon para verificar este atalho." as warning'
+          /usr/bin/osascript -e 'display alert "O app original não foi encontrado" message "Abra o Iconer para verificar este atalho." as warning'
 
         """
     }
